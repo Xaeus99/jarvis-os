@@ -1,0 +1,50 @@
+# Builds the JARVIS OS image on every push to main and nightly, runs the daemon tests first,
+# pushes ghcr.io/<owner>/jarvis-os:{beta,<date>} and signs it with cosign. Promotion to :stable is a
+# separate manual job after the beta has booted on a test machine.
+name: build-jarvis-os
+on:
+  push: { branches: [main] }
+  schedule: [{ cron: "15 6 * * *" }]     # daily, after Bazzite's own nightly
+  workflow_dispatch:
+permissions: { contents: read, packages: write, id-token: write }
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r jarvisd/requirements-test.txt && pip install --no-deps openwakeword==0.6.0   # its tflite dependency has no wheels; jarvisd uses the ONNX models
+      - run: QT_QPA_PLATFORM=offscreen python -m pytest -q jarvisd/tests
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk (Bazzite NVIDIA base is ~6 GB compressed)
+        uses: ublue-os/remove-unwanted-software@v9
+      - name: Image name (ghcr needs lowercase)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          VERSION="0.1.$(date -u +%Y%m%d)"
+          cp -r jarvisd image/jarvisd; cp cosign.pub image/cosign.pub
+          sudo podman build --build-arg JARVIS_OS_VERSION="$VERSION" --build-arg IMAGE_REPO="$IMAGE" --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" -t "$IMAGE:beta" -t "$IMAGE:$VERSION" image
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman push --digestfile digest.txt "$IMAGE:$VERSION"
+          sudo podman push "$IMAGE:beta"
+          echo "DIGEST=$(cat digest.txt)" >> "$GITHUB_ENV"
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign
+        env: { COSIGN_PRIVATE_KEY: "${{ secrets.SIGNING_SECRET }}", COSIGN_PASSWORD: "" }
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
+          cosign verify --key cosign.pub "$IMAGE@$DIGEST" > /dev/null && echo "signature verified"
+      - name: Summary
+        run: |
+          echo "### JARVIS OS $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$IMAGE@$DIGEST\` (tags: beta, $VERSION), signed with cosign" >> "$GITHUB_STEP_SUMMARY"
