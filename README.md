@@ -4,6 +4,15 @@ J.A.R.V.I.S. as an operating system: Bazzite (KDE Plasma, Steam/Proton, NVIDIA o
 layer, shipped as a signed bootc image so Tab can update it over the air. Dual-boots next to Windows and never
 modifies Windows.
 
+**📖 [How to get JARVIS: the tutorial](docs/TUTORIAL.md)** (Windows PC, build your own, dual-boot install)
+
+<img src="docs/img/jarvis_os_desktop_clean.jpg" width="100%" alt="JARVIS OS desktop: KDE Plasma 6 with the Vibranium theme">
+
+## Get your own Tab
+
+JARVIS sends anything that isn't a built-in command to **Tab**, your own AI assistant that texts, browses and gets things done.
+Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot/r/856A517B3CCACA47)**
+
 | Path | What |
 |---|---|
 | `image/Containerfile` | the OS image: `FROM ghcr.io/ublue-os/bazzite-nvidia-open:stable@sha256:…` + `build_files/build.sh` |
@@ -18,9 +27,14 @@ modifies Windows.
 
 ## Test
 
-    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 77 tests
+    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 85 tests
 
-## Status (phase 1, Oct 9 2026)
+## Status (phase 2, Oct 9 2026)
+
+Phase 2 adds the public repo, signed cloud builds, the first-login app installer and "restore my games".
+The image itself has not booted on real hardware yet.
+
+### Phase 1
 
 Built and tested on a Linux build box: boot theme (real UEFI boot in QEMU), jarvisd brain + Linux hands
 (fake command runner), remote-control policy + kill switch, Qt indicator (offscreen and on a real Plasma 5
