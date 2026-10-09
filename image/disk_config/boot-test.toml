@@ -1,0 +1,9 @@
+# Disk image for the CI boot test only (a throwaway VM user). Never used for real installs.
+[[customizations.user]]
+name = "jarvis"
+password = "jarvis-boot-test"
+groups = ["wheel"]
+
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = "40 GiB"
