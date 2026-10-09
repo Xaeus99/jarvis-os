@@ -1,0 +1,10 @@
+{
+ "rate_control": "CBR",
+ "bitrate": 6000,
+ "keyint_sec": 2,
+ "preset2": "p5",
+ "tune": "hq",
+ "multipass": "qres",
+ "profile": "high",
+ "bf": 2
+}

@@ -47,6 +47,22 @@ hardware, the Tab channel/HUD/workspace are not ported yet.
 - First login: `jarvis-first-boot-apps.service` installs `image/system_files/usr/share/jarvis-os/apps/flatpaks.list` from Flathub (per user, retried at the next login if anything fails).
 - "Jarvis, restore my games" (or the *Restore my games* menu entry, or `jarvisctl games restore`) mounts the Windows drive **read-only**, reads its Steam libraries, skips games that only run on Windows (`steam-compat.json`), and queues the rest so Steam downloads them on its next start. Launch-option tweaks (e.g. Marvel Rivals' `SteamDeck=1 %command%`) are printed. No game list ships in the image; it is read from your own library.
 
+## Gaming & streaming
+
+Bazzite already brings GameMode, gamescope, MangoHud, OBS game-capture hooks, sched_ext schedulers, tuned power profiles, zstd zram and the big `vm.max_map_count`. JARVIS OS adds:
+
+| Say | What happens |
+|---|---|
+| **"game mode"** / **"game mode off"** | Switches to the *performance* power profile and back. Optional: the `scx_lavd` gaming scheduler, if `gaming.game_scheduler: lavd` is set in the config. |
+| **"stream mode"** / **"stream mode off"** | Game mode, plus lower audio latency (PipeWire quantum 256), held notifications and a paused file indexer. All of it reverses. |
+| **"gaming check"** | Reads the GPU and driver, Resizable BAR (BAR1 vs VRAM), power profile, GameMode, scheduler, and display mode + VRR. |
+| **"set up my monitor"** | Native resolution, highest refresh rate, adaptive sync on *automatic*. This also runs once at first login. |
+| **"turn on HDR"** / **"HDR off"** | Opt-in. HDR on RTX 50-series has open driver reports, so test it yourself. |
+
+Built in: Proton gets DLSS/Reflex (`PROTON_ENABLE_NVAPI=1`) and the DLSS updater, plus a 10 GB NVIDIA shader cache that is never trimmed. MangoHud is set up but hidden; add `mangohud %command%` to a game's launch options and press **Right Shift + F12**. There's an OBS **JARVIS Stream** profile: NVENC H.264 6000 kbps 1080p60 for streaming, NVENC AV1 for recordings, and a 30 s replay buffer. Discord screen share goes through the KDE portal, and **Vesktop** carries audio. For per-game boosts add `gamemoderun %command%`.
+
+*None of this has been tested on real hardware yet.*
+
 ## Updates and signing
 
 Every push to `main` (and a nightly run) builds `ghcr.io/<owner>/jarvis-os:beta`, pushes it, and signs it with cosign.

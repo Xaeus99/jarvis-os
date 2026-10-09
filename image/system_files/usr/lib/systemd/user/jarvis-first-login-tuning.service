@@ -1,0 +1,12 @@
+[Unit]
+Description=JARVIS OS: first-login gaming/streaming tuning (OBS profile, display mode + VRR)
+After=graphical-session.target plasma-workspace.target
+ConditionPathExists=!%h/.local/state/jarvis/tuning.done
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/sleep 20
+ExecStart=/usr/libexec/jarvis-os/first-login-tuning
+
+[Install]
+WantedBy=graphical-session.target

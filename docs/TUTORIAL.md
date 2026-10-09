@@ -94,11 +94,13 @@ cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests
 3. **Turn off Fast Startup** in Control Panel > Power Options > Choose what the power buttons do.
 4. **Make room**: right-click Start > **Disk Management**, right-click **C:** > **Shrink Volume**, and free up **at least 150 GB**. Leave the new space *unallocated*.
 5. **Make a USB stick** (8 GB or more) from the JARVIS OS ISO with [Fedora Media Writer](https://fedoraproject.org/workstation/download) or Rufus (use DD mode). This **erases the USB stick**, not your PC.
-6. **Boot from USB**: restart and tap the boot-menu key. On MSI boards that's usually **F11**. Pick the USB.
+6. **Boot from USB**: restart and tap the boot-menu key. On ASRock and MSI boards that's usually **F11**. Pick the USB.
 7. In the installer, choose **Installation destination > the unallocated space only**. **Never** pick "erase disk" or the Windows partitions.
 8. **Secure Boot**: on the first boot a blue screen asks to enroll a key. Pick *Enroll MOK* and type the password Bazzite's docs give, `universalblue`.
 9. **Done.** The JARVIS boot menu shows JARVIS OS and Windows. On JARVIS OS, *"Jarvis, switch to Windows"* restarts into Windows once. On Windows, `windows/Switch-To-JarvisOS.ps1` does the reverse.
 
 **After the first login:** JARVIS installs your apps (Discord, Brave, OBS, Spotify and more) in the background. Then say **"Jarvis, restore my games"**: it reads your Windows Steam library *read-only*, skips games that only run on Windows, and queues the rest to download.
+
+**Gaming & streaming:** say *"game mode"* before you play and *"stream mode"* before you go live. *"Gaming check"* tells you what's tuned. In BIOS, turn on **Re-Size BAR** and **Above 4G Decoding**. See the [README](../README.md#gaming--streaming) for everything that's tuned.
 
 **Already on Bazzite?** You can switch without reinstalling: `sudo bootc switch ghcr.io/OWNER/jarvis-os:beta`, where OWNER is the lowercase GitHub name of the repo you're using. `sudo bootc rollback` takes you back.

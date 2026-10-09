@@ -1,0 +1,8 @@
+{
+ "rate_control": "CQP",
+ "cqp": 24,
+ "preset2": "p5",
+ "tune": "hq",
+ "multipass": "qres",
+ "bf": 2
+}

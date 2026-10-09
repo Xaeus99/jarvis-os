@@ -1,0 +1,11 @@
+#!/bin/bash
+# JARVIS OS first-login tuning (once per user): OBS profile, best display mode with adaptive sync.
+set -u
+STATE="$HOME/.local/state/jarvis"; mkdir -p "$STATE"
+[ -e "$STATE/tuning.done" ] && exit 0
+OBSDIR="$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles"
+if [ ! -d "$OBSDIR" ] || [ -z "$(ls -A "$OBSDIR" 2>/dev/null)" ]; then
+  mkdir -p "$OBSDIR" && cp -r /usr/share/jarvis-os/obs/JARVIS_Stream "$OBSDIR/" && rm -f "$OBSDIR/JARVIS_Stream/README.txt"
+fi
+/usr/bin/jarvisctl say "set up my monitor" || true
+touch "$STATE/tuning.done"

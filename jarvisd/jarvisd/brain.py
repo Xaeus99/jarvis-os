@@ -43,6 +43,17 @@ def parse_os(low):
         return "rgb", {"profile": word.capitalize()}
     if F(r"(?:lights|rgb|lighting) (?:off|out)|turn (?:off|out) (?:the |my )?(?:lights|rgb|lighting)", t):
         return "rgb", {"off": True}
+    m = F(r"(?:turn |switch )?(?:on |off )?(game|gaming|stream|streaming) mode(?: (on|off))?|(?:start|end|stop|exit|leave|enter) (game|gaming|stream|streaming) mode", t)
+    if m:
+        kind = "stream" if "stream" in t else "game"
+        off = bool(re.search(r"\b(off|end|stop|exit|leave)\b", t))
+        return "mode", {"kind": kind, "on": not off}
+    if F(r"(?:run a |do a )?(?:gaming|game) (?:check|checkup|status)|check my (?:gaming )?(?:setup|rig|pc for gaming)|is my pc ready (?:for|to) (?:game|gaming|stream|streaming)", t):
+        return "gaming_check", {}
+    if F(r"(?:set up|fix|optimi[sz]e) my (?:monitor|display|screen)s?|(?:max|maximum|highest) refresh(?: rate)?|turn on (?:vrr|adaptive sync|g-?sync|freesync)", t):
+        return "display_setup", {"hdr": None}
+    if F(r"turn (?:on|off) hdr|hdr (?:on|off)", t):
+        return "display_setup", {"hdr": "on" in t}
     if F(r"(?:restore|reinstall|bring back|download|install|get) (?:all )?(?:of )?my (?:steam )?games(?: from windows)?", t):
         return "games_restore", {}
     if F(r"(?:install|download|get|set up|reinstall) (?:all )?(?:of )?my apps", t):
@@ -153,6 +164,29 @@ class LinuxBrain:
             except (IndexError, ValueError):
                 return self.say(f"The GPU gave me an answer I couldn't read, {s}.")
             return self.say(f"The RTX is at {t} degrees and {u} percent load, using {round(int(mu)/1024,1)} of {round(int(mt)/1024)} gigabytes, {s}.")
+        if action == "mode":
+            from . import gaming
+            ok, failed = gaming.set_mode(self.run, x["kind"], x["on"], self.cfg.get("gaming", {}))
+            name = "Stream mode" if x["kind"] == "stream" else "Game mode"
+            if not x["on"]:
+                return self.say(f"Back to normal, {s}." + (f" These didn't answer: {', '.join(failed)}." if failed else ""))
+            extra = " Audio latency is down, notifications are held and indexing is paused." if x["kind"] == "stream" else ""
+            return self.say(f"{name} on, {s}. Performance power profile.{extra}" + (f" These didn't answer: {', '.join(failed)}." if failed else ""))
+        if action == "gaming_check":
+            from . import gaming
+            lines = gaming.gaming_check(self.run)
+            return self.say(f"Gaming check, {s}: " + "; ".join(f"{k}: {v}" for k, v in lines) + ".")
+        if action == "display_setup":
+            from . import gaming
+            code, out = self.run(["kscreen-doctor", "-j"])
+            if code != 0:
+                return self.say(f"I can't read the display settings, {s}.")
+            cmds = gaming.best_display_commands(out, hdr=x.get("hdr"))
+            if not cmds:
+                return self.say(f"I don't see a connected display, {s}.")
+            code, _ = self.run(["kscreen-doctor", *cmds])
+            return self.say(f"Done, {s}: native resolution, highest refresh rate, adaptive sync on." + {True: " HDR is on.", False: " HDR is off."}.get(x.get("hdr"), "")
+                            if code == 0 else f"The display didn't take the change, {s}. Nothing was saved.")
         if action == "games_restore":
             if not self._confirm(f"Shall I queue your Windows Steam games for download here, {s}? I only read the Windows drive, "
                                  f"and Steam needs to be closed while I do it."):

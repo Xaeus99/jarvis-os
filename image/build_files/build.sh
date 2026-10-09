@@ -29,7 +29,7 @@ cd /usr/lib/jarvis-os && exec /usr/lib/jarvis-os/venv/bin/python -m jarvisd "$@"
 EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
-systemctl --global enable jarvisd.service jarvis-indicator.service ydotoold.service jarvis-first-boot-apps.service
+systemctl --global enable jarvisd.service jarvis-indicator.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
 systemctl enable jarvis-grub-theme.service
 
 # 5. Identity: keep ID=bazzite so ujust/Bazzite tooling keeps working; brand the names
