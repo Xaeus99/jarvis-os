@@ -1,0 +1,8 @@
+{
+ "source": "JARVIS v5.1.0 (Windows), public build: one personal joke command removed from commands.py",
+ "files": {
+  "commands.py": "863177456f213267a4d2acb3f495070e9e268e59d1c1692d69499421ff2a9172",
+  "qol.py": "1e41a60dbca25448dad28236c193add1ad1057f3009745cce7c9ead1ce6f8727",
+  "wake.py": "0a3598603831af0bc785831dd3f63928d412d55b245ecae9d18f790b40ebbe75"
+ }
+}

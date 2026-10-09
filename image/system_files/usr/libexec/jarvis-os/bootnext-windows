@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# One-time boot into Windows: sets the firmware BootNext only. BootOrder (the permanent default) is unchanged,
+# so the following boot returns to the JARVIS menu. Run via pkexec (polkit action os.jarvis.bootnext-windows).
+set -euo pipefail
+num="$(efibootmgr | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*? +Windows Boot Manager.*/\1/p' | head -n1)"
+if [ -z "$num" ]; then echo "no Windows Boot Manager entry" >&2; exit 2; fi
+efibootmgr --bootnext "$num" >/dev/null
+echo "BootNext=$num"

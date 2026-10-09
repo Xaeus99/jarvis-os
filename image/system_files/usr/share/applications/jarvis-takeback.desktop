@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Take back control from Tab
+Comment=J.A.R.V.I.S. kill switch: ends Tab's remote session instantly
+Exec=jarvisctl takeback
+Icon=process-stop
+NoDisplay=true
+X-KDE-Shortcuts=Meta+Shift+Esc

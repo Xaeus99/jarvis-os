@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Copy the theme next to GRUB and point GRUB at it. Idempotent; runs each boot, cheap when nothing changed.
+# Windows' own files are never touched: os-prober only READS the Windows EFI entry to list it.
+set -euo pipefail
+SRC=/usr/share/grub/themes/jarvis
+DST=/boot/grub2/themes/jarvis
+if ! cmp -s "$SRC/theme.txt" "$DST/theme.txt" 2>/dev/null; then
+  mkdir -p "$DST"; cp -a "$SRC/." "$DST/"
+  changed=1
+fi
+if ! grep -q '^GRUB_THEME=' /etc/default/grub 2>/dev/null; then
+  echo 'GRUB_THEME="/boot/grub2/themes/jarvis/theme.txt"' >> /etc/default/grub
+  echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
+  echo 'GRUB_TIMEOUT_STYLE=menu' >> /etc/default/grub
+  changed=1
+fi
+if [ "${changed:-0}" = 1 ]; then
+  grub2-mkconfig -o /boot/grub2/grub.cfg   # same thing `ujust regenerate-grub` does on Bazzite
+fi

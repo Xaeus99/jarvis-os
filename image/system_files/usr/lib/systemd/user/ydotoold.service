@@ -1,0 +1,11 @@
+[Unit]
+Description=ydotool input daemon (used only while Tab is driving; the kill switch stops it)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
+Restart=no
+
+[Install]
+WantedBy=graphical-session.target

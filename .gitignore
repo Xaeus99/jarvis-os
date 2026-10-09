@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+out/
+image/jarvisd/
+
+cosign.key
+*.key
+image/jarvisd/
+image/cosign.pub

@@ -1,0 +1,12 @@
+[Unit]
+Description=Install the JARVIS boot-menu theme and keep Windows in the menu
+ConditionPathExists=/usr/share/grub/themes/jarvis/theme.txt
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/jarvis-os/grub-theme
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
