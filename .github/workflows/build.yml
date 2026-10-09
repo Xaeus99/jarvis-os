@@ -22,6 +22,7 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-24.04
+    environment: release          # holds SIGNING_SECRET (the cosign private key); no approval rule
     steps:
       - uses: actions/checkout@v4
       - name: Free disk (Bazzite NVIDIA base is ~6 GB compressed)
@@ -45,6 +46,7 @@ jobs:
       - name: Sign
         env: { COSIGN_PRIVATE_KEY: "${{ secrets.SIGNING_SECRET }}", COSIGN_PASSWORD: "" }
         run: |
+          head -1 <<< "$COSIGN_PRIVATE_KEY" | grep -q "BEGIN ENCRYPTED SIGSTORE PRIVATE KEY" || { echo "::error::SIGNING_SECRET is missing or not a cosign key"; exit 1; }
           echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
           cosign sign -y --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
           cosign verify --key cosign.pub "$IMAGE@$DIGEST" > /dev/null && echo "signature verified"
