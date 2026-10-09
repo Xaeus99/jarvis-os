@@ -3,9 +3,11 @@
 name: boot-test
 on:
   workflow_dispatch: { inputs: { tag: { default: "beta" } } }
+  workflow_run: { workflows: [build-jarvis-os], types: [completed], branches: [main] }   # after every green build
 permissions: { contents: read, packages: read }
 jobs:
   boot:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
@@ -19,7 +21,7 @@ jobs:
           ls -l /dev/kvm
       - name: Build a qcow2 disk from the image
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag }}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag || 'beta' }}"
           mkdir -p output
           sudo podman pull "$IMAGE"
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
