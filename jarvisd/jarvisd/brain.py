@@ -43,6 +43,10 @@ def parse_os(low):
         return "rgb", {"profile": word.capitalize()}
     if F(r"(?:lights|rgb|lighting) (?:off|out)|turn (?:off|out) (?:the |my )?(?:lights|rgb|lighting)", t):
         return "rgb", {"off": True}
+    if F(r"(?:restore|reinstall|bring back|download|install|get) (?:all )?(?:of )?my (?:steam )?games(?: from windows)?", t):
+        return "games_restore", {}
+    if F(r"(?:install|download|get|set up|reinstall) (?:all )?(?:of )?my apps", t):
+        return "apps_install", {}
     if F(r"(?:what(?:'s| is) )?(?:my |the )?gpu (?:temp|temperature|usage|load)|how hot is (?:my |the )?(?:gpu|graphics card)", t):
         return "gpu_stats", {}
     return None
@@ -149,6 +153,20 @@ class LinuxBrain:
             except (IndexError, ValueError):
                 return self.say(f"The GPU gave me an answer I couldn't read, {s}.")
             return self.say(f"The RTX is at {t} degrees and {u} percent load, using {round(int(mu)/1024,1)} of {round(int(mt)/1024)} gigabytes, {s}.")
+        if action == "games_restore":
+            if not self._confirm(f"Shall I queue your Windows Steam games for download here, {s}? I only read the Windows drive, "
+                                 f"and Steam needs to be closed while I do it."):
+                return self.say(f"Very well, {s}.")
+            self.run(["steam", "-shutdown"])
+            code, _ = self.run(["systemd-run", "--user", "--collect", "--unit=jarvis-games-restore", "--on-active=5",
+                                "/usr/bin/jarvisctl", "games", "restore"])
+            return self.say(f"On it, {s}. Open Steam in a minute and your games will be downloading. "
+                            f"Anything that only runs on Windows stays there." if code == 0 else f"I couldn't start the restore, {s}.")
+        if action == "apps_install":
+            code, _ = self.run(["systemd-run", "--user", "--collect", "--unit=jarvis-apps-install",
+                                "/usr/bin/jarvisctl", "apps", "install"])
+            return self.say(f"Installing your apps in the background, {s}. I'll leave a notification for each." if code == 0
+                            else f"I couldn't start the app install, {s}.")
         return self.say(f"I can't do that one yet, {s}.")
 
 

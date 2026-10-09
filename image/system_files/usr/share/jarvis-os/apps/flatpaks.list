@@ -1,0 +1,16 @@
+# JARVIS OS first-boot apps, installed per user from Flathub by jarvis-first-boot-apps.service
+# (Steam, Lutris, OBS's game-capture plugin and the NVIDIA driver already ship in the Bazzite base.)
+com.discordapp.Discord        # Discord
+dev.vencord.Vesktop           # Discord client whose screen share carries audio on Wayland (for streaming)
+com.brave.Browser             # Brave
+com.google.Chrome             # Chrome
+com.obsproject.Studio         # OBS Studio (NVENC works with the NVIDIA driver)
+com.spotify.Client            # Spotify
+org.blender.Blender           # Blender
+org.prismlauncher.PrismLauncher  # Minecraft: Java Edition with CurseForge + Modrinth mods
+com.modrinth.ModrinthApp      # Modrinth App
+sh.ppy.osu                    # osu!(lazer)
+org.vinegarhq.Sober           # Roblox (unofficial: runs Roblox's Android client)
+org.kde.kdenlive              # video editor (CapCut has no Linux app; CapCut Web runs in the browser)
+com.vysp3r.ProtonPlus         # Proton versions (GE-Proton) for games that need them
+com.github.tchx84.Flatseal    # app permissions

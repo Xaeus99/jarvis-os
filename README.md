@@ -28,6 +28,11 @@ session under Xvfb), wake word with the real openWakeWord model on synthetic spe
 NOT yet done: the image has never been built (needs ~15 GB + podman; done in CI), nothing has run on real
 hardware, the Tab channel/HUD/workspace are not ported yet.
 
+## Apps and games
+
+- First login: `jarvis-first-boot-apps.service` installs `image/system_files/usr/share/jarvis-os/apps/flatpaks.list` from Flathub (per user, retried at the next login if anything fails).
+- "Jarvis, restore my games" (or the *Restore my games* menu entry, or `jarvisctl games restore`) mounts the Windows drive **read-only**, reads its Steam libraries, skips games that only run on Windows (`steam-compat.json`), and queues the rest so Steam downloads them on its next start. Launch-option tweaks (e.g. Marvel Rivals' `SteamDeck=1 %command%`) are printed. No game list ships in the image; it is read from your own library.
+
 ## Updates and signing
 
 Every push to `main` (and a nightly run) builds `ghcr.io/<owner>/jarvis-os:beta`, pushes it, and signs it with cosign.

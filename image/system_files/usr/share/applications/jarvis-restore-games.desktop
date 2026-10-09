@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Restore my games
+Comment=Queue your Windows Steam games for download on JARVIS OS (reads Windows, never writes to it)
+Exec=konsole --hold -e /usr/bin/jarvisctl games restore
+Icon=steam
+Categories=Game;

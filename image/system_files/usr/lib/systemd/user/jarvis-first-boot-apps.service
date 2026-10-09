@@ -1,0 +1,14 @@
+[Unit]
+Description=JARVIS OS: install the first-boot app list (once per user)
+After=graphical-session.target network-online.target
+ConditionPathExists=!%h/.local/state/jarvis/apps.done
+
+[Service]
+Type=oneshot
+# waits for the network, then installs; a failed app is retried at the next login
+ExecStartPre=/usr/bin/sh -c 'for i in $(seq 60); do flatpak remote-ls --user flathub >/dev/null 2>&1 || ping -c1 -W2 dl.flathub.org >/dev/null 2>&1 && exit 0; sleep 5; done; exit 0'
+ExecStart=/usr/bin/jarvisctl apps install --first-boot
+TimeoutStartSec=3h
+
+[Install]
+WantedBy=graphical-session.target

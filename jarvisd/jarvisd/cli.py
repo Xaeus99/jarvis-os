@@ -2,6 +2,8 @@
   jarvisctl say "set a timer for 5 minutes"   run one phrase through the brain (prints the spoken reply)
   jarvisctl takeback                          the kill switch (bound to Meta+Shift+Esc)
   jarvisctl status                            remote-control state + OS image versions
+  jarvisctl apps install                      install the JARVIS OS app list from Flathub (first boot does this once)
+  jarvisctl games restore [--mount C=/path]   queue this PC's Windows Steam games for download on Linux
   jarvisctl --dry-run say "switch to windows" print the OS commands instead of running them"""
 from __future__ import annotations
 import argparse, json, sys
@@ -26,6 +28,11 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("say"); p.add_argument("text")
     sub.add_parser("takeback"); sub.add_parser("status")
+    p = sub.add_parser("apps"); p.add_argument("what", choices=["install"]); p.add_argument("--list", default=None)
+    p.add_argument("--first-boot", action="store_true")
+    p = sub.add_parser("games"); p.add_argument("what", choices=["restore", "list"])
+    p.add_argument("--mount", action="append", default=[], help="LETTER=/path of an already-mounted Windows drive")
+    p.add_argument("--steamapps", default=None)
     a = ap.parse_args(argv)
     run = DryRun() if a.dry_run else Runner()
     b = LinuxBrain(run=run, ask=(lambda q: (print("JARVIS asks:", q), "yes")[1]) if a.yes else (lambda q: (print("JARVIS asks:", q), "")[1]))
@@ -33,8 +40,59 @@ def main(argv=None):
         print("JARVIS:", b.handle(a.text))
     elif a.cmd == "takeback":
         n = b.remote.takeback(by="jarvisctl"); print(f"control taken back ({n} queued actions dropped)")
+    elif a.cmd == "apps":
+        return apps_install(run, a)
+    elif a.cmd == "games":
+        return games(run, a)
     elif a.cmd == "status":
         print(json.dumps({"remote": b.remote.st}, indent=1))
+    return 0
+
+def apps_install(run, a):
+    import os
+    from . import apps
+    ids = apps.load_list(a.list or os.path.join(apps.SHARE, "flatpaks.list"))
+    res = apps.install_flatpaks(run, ids, notify=lambda m: print(m, flush=True))
+    failed = [k for k, v in res.items() if v == "failed"]
+    print(json.dumps(res, indent=1))
+    if a.first_boot and not failed:
+        os.makedirs(apps.STATE, exist_ok=True)
+        open(os.path.join(apps.STATE, "apps.done"), "w").write("ok\n")
+    return 1 if failed else 0
+
+def games(run, a):
+    """Reads (never writes) the Windows Steam library and queues the Linux-compatible games."""
+    import os
+    from . import apps
+    mounts = dict(m.split("=", 1) for m in a.mount)
+    mounts = {k.upper(): v for k, v in mounts.items()}
+    if not mounts:
+        for dev, label, mp in apps.ntfs_partitions(run):
+            if not mp:
+                rc, out = run(["udisksctl", "mount", "-b", dev, "-o", "ro"], timeout=60)   # read-only, always
+                mp = out.rsplit(" at ", 1)[-1].strip().rstrip(".") if rc == 0 and " at " in out else None
+            if mp:
+                letter = "C" if apps._ci(mp, "Windows", "System32") else chr(ord("D") + len([k for k in mounts if k != "C"]))
+                mounts.setdefault(letter, mp)
+    if not mounts:
+        print("No Windows drive found. Mount it read-only and pass --mount C=/path.")
+        return 2
+    found = apps.find_windows_steam(mounts)
+    target = a.steamapps or apps.linux_steamapps()
+    install, skip, tweaks = apps.plan_restore(found, apps.load_compat(), target)
+    if a.what == "list" or getattr(run, "calls", None) is not None:      # list, or --dry-run
+        print(json.dumps({"install": install, "stays_on_windows": skip, "tweaks": tweaks}, indent=1))
+        return 0
+    rc, _ = run(["pgrep", "-x", "steam"], timeout=5)
+    if rc == 0:
+        print("Close Steam first (Steam > Exit), then run this again.")
+        return 3
+    written = apps.queue_downloads(install, target)
+    print(f"Queued {len(written)} games; open Steam and they start downloading.")
+    for s in skip:
+        print(f"Stays on Windows: {s['name']} ({s['why']})")
+    for t in tweaks:
+        print(f"Tip for {t['name']}: Properties > Launch options: {t['launch_options']}")
     return 0
 
 if __name__ == "__main__":

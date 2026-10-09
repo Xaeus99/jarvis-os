@@ -1,0 +1,40 @@
+{
+ "_note": "Public compatibility facts for well-known Steam titles, used by `jarvisctl games restore`. Sources: ProtonDB summaries, areweanticheatyet.com, Steam store platform flags (read Oct 9 2026).",
+ "105600": {
+  "status": "works",
+  "why": "native Linux version"
+ },
+ "1281930": {
+  "status": "works",
+  "why": "native Linux version"
+ },
+ "2357570": {
+  "status": "works",
+  "why": "Proton; ProtonDB Platinum"
+ },
+ "2767030": {
+  "status": "works-with-tweak",
+  "launch_options": "SteamDeck=1 %command%",
+  "why": "Proton; ProtonDB Gold, community fix for startup"
+ },
+ "359550": {
+  "status": "windows-only",
+  "why": "BattlEye anti-cheat blocks Linux (ProtonDB Borked)"
+ },
+ "431960": {
+  "status": "works-with-tweak",
+  "why": "use the KDE Wallpaper Engine plugin with your Steam workshop wallpapers; the Windows app itself is ProtonDB Bronze"
+ },
+ "438100": {
+  "status": "works",
+  "why": "Proton; Easy Anti-Cheat allows Linux; ProtonDB Gold"
+ },
+ "714010": {
+  "status": "works",
+  "why": "Proton; ProtonDB Gold"
+ },
+ "228980": {
+  "status": "skip",
+  "why": "Steamworks redistributables; Proton brings its own"
+ }
+}
