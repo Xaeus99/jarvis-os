@@ -73,9 +73,9 @@ done
 
 # 9. First login is JARVIS OS, not Bazzite: the base's welcome app (Bazzite Portal / yafti) no longer autostarts.
 #    It stays installed and can still be opened from the app menu.
-for f in /etc/xdg/autostart/*.desktop /usr/etc/xdg/autostart/*.desktop; do
+for f in /etc/xdg/autostart/*.desktop /usr/etc/xdg/autostart/*.desktop /etc/skel/.config/autostart/*.desktop; do
   [ -f "$f" ] || continue
-  if grep -qiE '^(Name|Exec)=.*(bazzite.?portal|yafti)' "$f"; then
+  if [ "$(basename "$f")" = bazzite-portal.desktop ] || grep -qiE '^(Name|Exec)=.*(bazzite.?portal|yafti)' "$f"; then
     echo "welcome app autostart off: $f"; sed -i '/^Hidden=/d' "$f"; echo 'Hidden=true' >> "$f"
   fi
 done
