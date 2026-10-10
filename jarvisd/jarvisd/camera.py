@@ -23,6 +23,17 @@ def has_device(dev_root="/dev"):
     except OSError:
         return False
 
+def quiet_watcher_cls(dev_root="/dev"):
+    """The v5.1 FaceWatcher, but it only asks OpenCV to open a webcam when /dev has a video device. Without one,
+    OpenCV's V4L2 backend logs two warnings on every 3-minute re-check (seen in boot-test run 38070835970)."""
+    from .core.camera import FaceWatcher
+    class QuietFaceWatcher(FaceWatcher):
+        def _open(self):
+            if not has_device(dev_root):
+                return None
+            return super()._open()
+    return QuietFaceWatcher
+
 def greeting(sir="sir", ccfg=None, weather_line=None, now=None):
     ccfg = ccfg or {}
     now = now or datetime.datetime.now()
@@ -47,7 +58,7 @@ def start(cfg, brain, speak, is_gaming=lambda: False, watcher_cls=None):
             log.info("camera greeting off: OpenCV isn't installed")
         return None
     if watcher_cls is None:
-        from .core.camera import FaceWatcher as watcher_cls
+        watcher_cls = quiet_watcher_cls()
     w = watcher_cls(ccfg, brain.state_dir, lambda: speak(greeting(brain.sir, ccfg, getattr(brain, "weather_line", None))),
                     is_gaming=is_gaming)
     w.start()

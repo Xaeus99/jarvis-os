@@ -83,3 +83,16 @@ def test_voice_camera_commands(brain_factory, rec):
     assert "deleted" in b.handle("forget my face") and b.camera.book.gone
     b.handle("turn on the camera"); assert b.camera.enabled.is_set()
     b.handle("turn off the face greeting"); assert not b.camera.enabled.is_set()
+
+
+def test_no_video_device_means_opencv_is_never_asked(tmp_path, monkeypatch):
+    """Without /dev/video*, the re-check doesn't touch OpenCV (its V4L2 backend logs warnings every time)."""
+    from jarvisd import camera
+    from jarvisd.core import camera as core_cam
+    opened = []
+    monkeypatch.setattr(core_cam.FaceWatcher, "_open", lambda self: opened.append(1) or "cap")
+    W = camera.quiet_watcher_cls(dev_root=str(tmp_path))
+    w = W.__new__(W)
+    assert w._open() is None and opened == []
+    (tmp_path / "video0").write_text("")
+    assert w._open() == "cap" and opened == [1]
