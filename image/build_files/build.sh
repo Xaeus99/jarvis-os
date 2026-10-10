@@ -19,7 +19,7 @@ export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python \
     "onnxruntime>=1.17,<2" "faster-whisper>=1.0.3" "sounddevice>=0.4.6" "scipy>=1.10" tqdm requests "scikit-learn>=1.3" \
     "numpy>=1.24" "PySide6-Essentials>=6.6,<6.12" "psutil>=5.9" "rapidfuzz>=3.0" "piper-tts>=1.3" \
-    "websocket-client>=1.6"
+    "websocket-client>=1.6" "opencv-contrib-python-headless>=4.8,<5"
 # openWakeWord's tflite dependency has no wheels; jarvisd only uses its ONNX models
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python --no-deps "openwakeword==0.6.0"
 rm -rf /tmp/uvenv

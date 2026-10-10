@@ -8,6 +8,10 @@
   "theme.py": "fca0706ba3e6b2e758c4dd4a05c60fd6a2849d781a8926710a7dc8249c70cc1a",
   "overlay.py": "10ab48bf49b0d644f04fe96b0d97a778341e8ab681654044d950b60206112cc3",
   "weather.py": "54427cf4d1a46e0d43fe2f42530abac3bbf4f4987419bf64e470130e7d3a661a",
-  "obs.py": "7ee222c89ab7d48e8e1796b3847560151af9b504c96afa4eeacc58a8f8f4166c"
+  "obs.py": "7ee222c89ab7d48e8e1796b3847560151af9b504c96afa4eeacc58a8f8f4166c",
+  "camera.py": "e3df3b1899475cba200685bf8f5f7196b3eebd306c2b36c9e2acec3423a782d0"
+ },
+ "patched": {
+  "camera.py": "Linux patches on v5.1 camera.py (sha256 dcbb022ef5e0ee1769bb2ebc9afe3040a50f4cbe8a62df31c5a1c7a6e759bf4e): V4L2 capture, pauses for Linux webcam apps (OBS, Discord, ...), Linux add-on message, owner's name removed from the docstring"
  }
 }

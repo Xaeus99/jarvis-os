@@ -10,3 +10,4 @@ onnxruntime>=1.17,<2
 faster-whisper>=1.0.3
 pytest
 websocket-client>=1.6
+opencv-contrib-python-headless>=4.8,<5

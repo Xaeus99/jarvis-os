@@ -12,7 +12,8 @@ log = logging.getLogger("jarvisd.brain")
 
 OS_DESTRUCTIVE = {"switch_windows", "reboot_bios", "rollback", "reboot_update"}
 # the shared v5.1 command kinds JARVIS OS runs locally (everything else the shared parser knows goes to Tab)
-LOCAL_KINDS = {"workspace_open", "workspace_close", "stream_start", "stream_stop", "record_start", "record_stop", "clip"}
+LOCAL_KINDS = {"workspace_open", "workspace_close", "stream_start", "stream_stop", "record_start", "record_stop", "clip",
+               "learn_face", "forget_face", "camera_on", "camera_off"}
 
 def parse_os(low):
     """JARVIS OS-only phrases. Returns (action, extra) or None."""
@@ -130,7 +131,30 @@ class LinuxBrain:
             return self.say(self.studio.stop("record" if k == "record_stop" else "stream", s))
         if k == "clip":
             return self.say(self.studio.clip(s))
+        if k in ("learn_face", "forget_face", "camera_on", "camera_off"):
+            return self.camera_action(k)
         return self.say(f"That one isn't available on Linux yet, {s}.")
+
+    def camera_action(self, k):
+        s, cam = self.sir, getattr(self, "camera", None)
+        if cam is None:
+            from . import camera as camglue
+            if not camglue.available():
+                return self.say(f"The camera greeting isn't available on this system yet, {s}: the vision add-on is missing.")
+            if k == "camera_off":
+                return self.say(f"Camera greeting is already off, {s}.")
+            return self.say(f"I don't have a camera to look through yet, {s}. Plug in a webcam and ask me again."
+                            if not camglue.has_device() else f"The camera greeting is switched off in my settings, {s}.")
+        if k == "learn_face":
+            self.say(f"Look straight at the camera and hold still for about ten seconds, {s}.")
+            ok, msg = cam.enroll()
+            return self.say(msg)
+        if k == "forget_face":
+            cam.book.forget()
+            return self.say(f"Done, {s}. Your face data is deleted; I'll greet anyone at this desk again.")
+        on = k == "camera_on"
+        (cam.enabled.set if on else cam.enabled.clear)()
+        return self.say(f"Camera greeting {'on' if on else 'off'}, {s}.")
 
     def say(self, text):
         self.spoken.append(text); self._say(text); return text

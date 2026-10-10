@@ -151,6 +151,12 @@ def main():
         brain.gamewatch = gamewatch.wire(cfg, brain.run, hud=hud).start()
     except Exception as e:
         log.info("game watcher unavailable: %r", e)
+    try:                                  # "welcome back, sir" (paused in games and while OBS/Discord use the webcam)
+        from . import camera
+        gw = getattr(brain, "gamewatch", None)
+        brain.camera = camera.start(cfg, brain, speak, is_gaming=lambda: bool(gw and gw.gaming))
+    except Exception as e:
+        log.info("camera greeting unavailable: %r", e)
     _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone
