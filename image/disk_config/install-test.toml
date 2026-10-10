@@ -10,7 +10,7 @@ text
 lang en_US.UTF-8
 keyboard us
 timezone America/New_York --utc
-network --bootproto=dhcp --activate
+network --bootproto=dhcp --activate --hostname=jarvis-os
 ignoredisk --only-use=vda
 clearpart --none
 autopart --type=btrfs --noswap
@@ -22,13 +22,16 @@ xconfig --startxonboot
 poweroff
 %post --log=/var/log/jarvis-install-test-post.log
 systemctl set-default graphical.target
+# firmware boot entry: "JARVIS OS" instead of the base's name (jarvis-boot-names.service re-checks every boot)
+/usr/libexec/jarvis-os/efi-label || :
 # test-only: write a diagnostics report on every boot, read back from the disk by the CI host
 cat > /etc/jarvis-install-report.sh <<'EOF'
 #!/usr/bin/bash
 sleep 75
 { echo "=== boot $(date -Is)"; cat /usr/lib/jarvis-os/version; efibootmgr -v; lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS
   cat /proc/cmdline; systemctl --no-pager --failed
-  journalctl -b --no-pager -u jarvis-grub-theme -u tuned -u tuned-ppd | tail -80
+  journalctl -b --no-pager -u jarvis-grub-theme -u jarvis-boot-names -u tuned -u tuned-ppd | tail -80
+  echo "--- boot entries"; hostname; grep -H '^title' /boot/loader/entries/*.conf
   echo "--- grub.cfg"; grep -n -i -E "theme|windows|menuentry|blscfg|timeout|source" /boot/grub2/grub.cfg
   ls -la /boot/grub2 /boot/grub2/themes 2>&1
   echo "--- /etc/default/grub"; cat /etc/default/grub; rpm-ostree status | head -12
