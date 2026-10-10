@@ -46,15 +46,21 @@ def main(argv=None):
     p = sub.add_parser("workspace", help="the workspace panel (Ctrl+Shift+J runs `jarvisctl workspace toggle`)")
     p.add_argument("what", nargs="?", default="toggle", choices=["toggle", "open", "close", "status"])
     p = sub.add_parser("ai", help="the offline brain (local AI chat): setup downloads it, status, ask \"...\"")
-    p.add_argument("what", choices=["setup", "status", "ask"]); p.add_argument("text", nargs="?", default="")
+    p.add_argument("what", choices=["setup", "status", "ask", "race"]); p.add_argument("text", nargs="?", default="")
+    p.add_argument("--in-game", action="store_true", help="race: as during a game (small model only)")
     p.add_argument("--first-boot", action="store_true")
     p = sub.add_parser("tell", help="say something to the running JARVIS (as if spoken); it answers out loud")
     p.add_argument("text")
+    p = sub.add_parser("make", help="make code or an image locally (what \"Jarvis, write code for ...\" / \"make an image of ...\" do)")
+    p.add_argument("what", choices=["code", "image", "status", "setup"]); p.add_argument("text", nargs="?", default="")
+    p.add_argument("--no-viewer", action="store_true", help="don't open the JARVIS viewer")
     sub.add_parser("windows", help="list the open windows (asks KWin)")
     sub.add_parser("listen", help="make the running JARVIS listen now (push-to-talk; bound to Ctrl+Shift+Space)")
     a = ap.parse_args(argv)
     if a.cmd == "ai":
         return ai_cmd(a)
+    if a.cmd == "make":
+        return make_cmd(a)
     if a.cmd == "windows":
         from . import kwin
         try:
@@ -108,9 +114,56 @@ def ai_cmd(a):
     if a.what == "status":
         print(json.dumps({"ready": ai.ready(), "model": ai.model(), **localai.read_state()}))
         return 0
+    if a.what == "race":
+        import time as _t
+        t0 = _t.monotonic()
+        res = ai.ask_stream(a.text or "Introduce yourself in one sentence.",
+                            lambda s: print(f"[{_t.monotonic() - t0:5.1f}s] {s}", flush=True), in_game=a.in_game)
+        if res is None:
+            print("(the offline brain isn't ready: jarvisctl ai setup)"); return 1
+        print(json.dumps({"winner": res.winner, "first_sentence_s": res.first_s, "racers": ai.available(a.in_game),
+                          "errors": res.errors}))
+        return 0 if res.ok else 1
     ans = ai.ask(a.text or "Introduce yourself in one sentence.")
     print("JARVIS:", ans if ans else "(the offline brain isn't ready: jarvisctl ai setup)")
     return 0 if ans else 1
+
+def make_cmd(a):
+    """Blocking version of the voice commands, for scripts and tests. Prints one JSON line with the result."""
+    import os, time
+    from . import creator, safety
+    try:
+        cfg = json.load(open(os.path.expanduser("~/.config/jarvis/config.json")))
+    except (OSError, ValueError):
+        cfg = {}
+    show = (lambda k, p: None) if a.no_viewer else None
+    if a.what in ("status", "setup"):
+        img, code = creator.ImageMaker(cfg, show=show), creator.CodeMaker(cfg, show=show)
+        if a.what == "setup":
+            img.install(progress=lambda label, pct: print(f"{label} {pct}%", flush=True) if pct % 25 == 0 else None)
+            code.ensure_model()
+        print(json.dumps({"images": img.installed(), "image_build": img.build, "code": code.have_model()}))
+        return 0
+    t0 = time.monotonic()
+    if a.what == "code":
+        if not safety.check_code_request(a.text):
+            print(json.dumps({"result": "refused"})); return 1
+        code = creator.CodeMaker(cfg, show=show)
+        if not code.ensure_model():
+            print(json.dumps({"result": "failed", "detail": "the coding model didn't download"})); return 1
+        path, src, lang, note = code.write(a.text)
+        print(json.dumps({"result": "ok", "path": path, "lang": lang, "lines": len(src.splitlines()),
+                          "seconds": round(time.monotonic() - t0, 1)}))
+        return 0
+    img = creator.ImageMaker(cfg, show=show)
+    ok, kind = safety.check_prompt(a.text)
+    if not ok:
+        print(json.dumps({"result": "refused", "detail": kind})); return 1
+    if not img.installed():
+        img.install(progress=lambda label, pct: print(f"{label} {pct}%", flush=True) if pct % 25 == 0 else None)
+    res, detail = img.generate(a.text)
+    print(json.dumps({"result": res, "detail": detail, **(img.last or {}), "total_seconds": round(time.monotonic() - t0, 1)}))
+    return 0 if res == "ok" else 1
 
 def workspace_cmd(a):
     from . import workspace

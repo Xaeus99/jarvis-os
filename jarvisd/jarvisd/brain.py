@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import ota, rgb, switchos
+from . import makers, ota, rgb, switchos
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -109,6 +109,7 @@ class LinuxBrain:
         self.forward = forward               # callable(text) -> sends to Tab; None = not linked
         from .localai import LocalAI
         self.ai = LocalAI(self.cfg)          # the offline brain (Ollama); answers what the commands don't
+        self.makers = makers.Makers(self)    # code + image creation, local and safety-checked
         self.spoken = []
         self.hands = LinuxHands(self.cfg, self.state_dir, run=self.run)
         self.qol = qol.QoL(self, hands=self.hands, state_dir=self.state_dir, start_clock=False)
@@ -217,6 +218,13 @@ class LinuxBrain:
     def say(self, text):
         self.spoken.append(text); self._say(text); return text
 
+    def is_gaming(self):
+        gw = getattr(self, "gamewatch", None)
+        try:
+            return bool(gw and gw.gaming)
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     def handle(self, text):
         low = commands.normalize(text)
@@ -237,9 +245,15 @@ class LinuxBrain:
             ready = False
         where = route(raw, bool(self.forward), ready)
         if where == "ai":
-            ans = self.ai.ask(raw, sir=s)
-            if ans:
-                return self.say(ans)
+            stream = getattr(self.ai, "ask_stream", None)
+            if stream is not None:              # the race: sentences are spoken as they arrive
+                res = stream(raw, self.say, sir=s, in_game=self.is_gaming())
+                if res is not None and res.ok:
+                    return res.text
+            else:
+                ans = self.ai.ask(raw, sir=s)
+                if ans:
+                    return self.say(ans)
             where = "tab" if self.forward else None
         if where == "tab":
             self.forward(raw)
@@ -313,6 +327,17 @@ class LinuxBrain:
         if action == "ai_setup":
             from . import localai
             if self.ai.ready():
+                missing = []
+                if hasattr(self.ai, "available") and hasattr(self.ai, "racers"):
+                    have = set(self.ai.available())
+                    missing = [m for m in self.ai.racers() if m not in have]
+                if missing and isinstance(self.run, Runner):
+                    import threading
+                    st = localai.read_state()
+                    threading.Thread(target=localai.pull_extras, args=(self.cfg, self.ai.model(), localai.notifier(), st),
+                                     name="ai-extras", daemon=True).start()
+                    return self.say(f"My offline brain is here, {s}. I'm adding {len(missing)} more models in the background "
+                                    f"so they can race to answer you.")
                 return self.say(f"My offline brain is already here, {s}: {self.ai.model()}.")
             if localai.read_state().get("status") == "installing" and getattr(self, "_ai_thread", None) and self._ai_thread.is_alive():
                 return self.say(localai.status_line(sir=s))
@@ -328,6 +353,9 @@ class LinuxBrain:
         if action == "ai_status":
             from . import localai
             if self.ai.ready():
+                ms = self.ai.available() if hasattr(self.ai, "available") else []
+                if len(ms) > 1:
+                    return self.say(f"My offline brain is ready, {s}: {len(ms)} models race to answer, the first good answer wins.")
                 return self.say(f"My offline brain is ready, {s}: {self.ai.model()}.")
             return self.say(localai.status_line(sir=s))
         if action == "ai_forget":
@@ -480,6 +508,9 @@ def _handle(self, text):
     hit = parse_os(low)
     if hit:
         return self.os_action(*hit)
+    mk = makers.parse(text)                 # "write code for ...", "make an image of ..." (local, $0, safety-checked)
+    if mk is not None:
+        return self.makers.handle(*mk)
     it = commands.parse(text, app_names=tuple(APPS))
     return self._execute_intent(it)
 
