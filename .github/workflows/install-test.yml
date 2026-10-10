@@ -25,7 +25,7 @@ jobs:
           mkdir -p output
           sudo podman pull "$IMAGE"
           # images built before the repo fix still carry a repo with a missing GPG key; apply the same fix here
-          printf 'FROM %s\nCOPY fix_repos.py /tmp/fix_repos.py\nRUN python3 /tmp/fix_repos.py && rm /tmp/fix_repos.py\n' "$IMAGE" > /tmp/Containerfile.iso
+          printf 'FROM %s\nCOPY fix_repos.py /tmp/fix_repos.py\nRUN ls /etc/yum.repos.d /etc/pki/rpm-gpg; grep -rn terra-mesa /etc/yum.repos.d /usr/etc/yum.repos.d /etc/dnf 2>/dev/null; python3 /tmp/fix_repos.py && rm /tmp/fix_repos.py\n' "$IMAGE" > /tmp/Containerfile.iso
           sudo podman build -t localhost/jarvis-os-installtest:latest -f /tmp/Containerfile.iso image/build_files
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ./image/disk_config/install-test.toml:/config.toml:ro -v ./output:/output \
