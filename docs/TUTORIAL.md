@@ -89,6 +89,8 @@ cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests
 
 **The promise:** JARVIS OS never erases or changes Windows. You pick a system every time you turn the PC on.
 
+**Printable version:** the [install-day checklist](INSTALL_DAY.md).
+
 1. **Back up.** The best backup is a full *system image* on an external drive: Control Panel > Backup and Restore (Windows 7) > **Create a system image**. Also copy anything you'd hate to lose to the cloud.
 2. **Save your BitLocker recovery key** if Windows has one: [aka.ms/myrecoverykey](https://aka.ms/myrecoverykey).
 3. **Turn off Fast Startup** in Control Panel > Power Options > Choose what the power buttons do.
