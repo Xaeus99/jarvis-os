@@ -79,7 +79,9 @@ def best_display_commands(kscreen_json, hdr=None):
         def area(m):
             s = m.get("size") or {}
             return (s.get("width", 0) * s.get("height", 0))
-        native = max(area(m) for m in modes)
+        # the monitor's own preferred mode (its EDID) sets the resolution; virtual GPUs list bigger modes than the screen
+        pref = [m for m in modes if str(m.get("id")) in {str(p) for p in (o.get("preferredModes") or [])}]
+        native = max(area(m) for m in (pref or modes))
         best = max((m for m in modes if area(m) == native), key=lambda m: float(m.get("refreshRate", 0)))
         name = o["name"]
         if str(o.get("currentModeId")) != str(best.get("id")):

@@ -32,6 +32,11 @@ EOF
 systemctl --global enable jarvisd.service jarvis-indicator.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
 systemctl enable jarvis-grub-theme.service
 
+# 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);
+#     the wallpaper is set per user by usr/share/plasma/shells/.../updates/jarvis-os-wallpaper.js
+kwriteconfig6 --file /etc/xdg/kdeglobals --group General --key ColorScheme JarvisVibranium
+kwriteconfig6 --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
+
 # 5. Identity: keep ID=bazzite so ujust/Bazzite tooling keeps working; brand the names
 sed -i -e 's/^PRETTY_NAME=.*/PRETTY_NAME="JARVIS OS '"${JARVIS_OS_VERSION}"' (Vibranium)"/' \
        -e 's/^NAME=.*/NAME="JARVIS OS"/' /usr/lib/os-release

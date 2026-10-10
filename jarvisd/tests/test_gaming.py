@@ -22,6 +22,12 @@ def test_display_picks_native_highest_refresh_and_vrr():
     cmds = gaming.best_display_commands(json.dumps(KS))
     assert cmds == ["output.DP-1.mode.1", "output.DP-1.vrrpolicy.automatic"]     # 1440p@180, not 1080p@240
 
+def test_preferred_mode_beats_bigger_virtual_modes():
+    ks = json.loads(json.dumps(KS))
+    ks["outputs"][0]["preferredModes"] = ["2"]
+    ks["outputs"][0]["modes"].append({"id": "9", "name": "5120x2160@60", "refreshRate": 60.0, "size": {"width": 5120, "height": 2160}})
+    assert gaming.best_display_commands(ks)[0] == "output.DP-1.mode.1"     # 1440p (preferred size) at its top refresh
+
 def test_hdr_is_opt_in():
     assert not any("hdr" in c for c in gaming.best_display_commands(KS))
     assert "output.DP-1.hdr.enable" in gaming.best_display_commands(KS, hdr=True)
