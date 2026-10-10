@@ -66,7 +66,7 @@ for i in $(seq 1 40); do
 done
 mark "AI STATUS (RACE)"; ser 'jarvisctl ai status' 6
 mark "RACE"; ser 'jarvisctl ai race "why is the sky blue"' 150
-mark "RACE IN A GAME (small model only)"; ser 'jarvisctl ai race --in-game "say hello in five words"' 90
+mark "RACE IN A GAME (small model only)"; ser 'jarvisctl ai race "say hello in five words" --in-game' 90
 mark "RACE BY VOICE"; ser 'jarvisctl tell "tell me a fun fact about the moon"' 90
 # code creation: the local coding model writes one file, the JARVIS viewer opens it; nothing is run
 mark "CODE"; ser 'jarvisctl tell "write a python script that prints the first 20 fibonacci numbers"' 5
