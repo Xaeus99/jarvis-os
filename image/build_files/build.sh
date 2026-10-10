@@ -65,13 +65,21 @@ echo "IMAGE_REPO=${IMAGE_REPO}" >> /usr/lib/jarvis-os/version
 #    depsolves Anaconda from these repos); disable such repos. Updates come as whole signed images anyway.
 python3 /ctx/fix_repos.py
 
-# 8. Login screen: the JARVIS wallpaper behind whichever SDDM theme the base ships
+# 8. Login screen: the JARVIS wallpaper on Plasma Login Manager's greeter (the base's display manager since
+#    Fedora 44; it reads [Greeter][Wallpaper][org.kde.image][General] Image= from /etc/plasmalogin.conf). Any
+#    drop-in that sets a greeter wallpaper gets the same value, so whichever file wins, it's JARVIS.
+WP=file:///usr/share/wallpapers/JARVIS/contents/images/2560x1440.png
+for f in /etc/plasmalogin.conf /etc/plasmalogin.conf.d/*.conf; do
+  [ "$f" = /etc/plasmalogin.conf ] || grep -q 'Wallpaper' "$f" 2>/dev/null || continue
+  kwriteconfig6 --file "$f" --group Greeter --key WallpaperPluginId org.kde.image
+  kwriteconfig6 --file "$f" --group Greeter --group Wallpaper --group org.kde.image --group General --key Image "$WP"
+  echo "login screen wallpaper set in $f"; cat "$f"
+done
+# older bases with SDDM: same picture behind its theme
 for t in /usr/share/sddm/themes/*/; do
   [ -f "${t}theme.conf" ] || continue
-  ls -l "${t}theme.conf.user" 2>/dev/null || :   # Fedora links this into /var, which an image can't ship: replace the link
   rm -f "${t}theme.conf.user"
   printf '[General]\nbackground=/usr/share/wallpapers/JARVIS/contents/images/2560x1440.png\ntype=image\n' > "${t}theme.conf.user"
-  echo "login screen wallpaper: ${t}theme.conf.user"
 done
 
 # 9. First login is JARVIS OS, not Bazzite: the base's welcome app (Bazzite Portal / yafti) no longer autostarts.

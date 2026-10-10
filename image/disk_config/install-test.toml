@@ -33,6 +33,11 @@ sleep 75
   ls -la /boot/grub2 /boot/grub2/themes 2>&1
   echo "--- /etc/default/grub"; cat /etc/default/grub; rpm-ostree status | head -12
 } >> /var/log/jarvis-install-report.txt 2>&1
+sleep 300   # after the CI has logged in: what the first login did (Tab link, Windows drive, welcome apps)
+{ echo "--- after login $(date -Is)"; systemctl --no-pager --failed
+  journalctl -b --no-pager | grep -i -E "jarvis|udisks|polkit|portal@autostart|plasma-login-wallpaper" | grep -v -i vulkan | tail -60
+  cat /etc/plasmalogin.conf 2>&1 | head -20
+} >> /var/log/jarvis-install-report.txt 2>&1
 EOF
 chmod +x /etc/jarvis-install-report.sh
 cat > /etc/systemd/system/jarvis-install-report.service <<'EOF'
