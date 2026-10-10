@@ -63,7 +63,8 @@ back to the exact ISO) and publishes the release. `image/disk_config/release.env
 - [ ] Choose **Install JARVIS OS**.
 - [ ] **Installation destination:** pick the disk, choose to install into the **free space only**. **Never** choose
       *erase*, *reclaim space* or *delete* anything. If the installer shows the Windows partitions, leave them alone.
-- [ ] Create your user and password. Start the install and wait.
+- [ ] **User Creation:** make your user and password, and keep *Make this user administrator* ticked (the root
+      account stays off; that's normal). Then **Begin Installation** and wait.
 
 ## First boot
 - [ ] A **blue "MOK management" screen** appears once (Secure Boot key): *Enroll MOK* > *Continue* > *Yes* > password
