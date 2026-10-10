@@ -13,12 +13,22 @@
   "hudart.py": "57dde9ba088ead05074d6b44cdabc23fec6d17904896a47c2bdfa53450f8ef10",
   "workspace.py": "9caf5b4b60b3b57de0c16bb48a472388e44398df63bcf6dde31727697da8e45d",
   "wsdata.py": "c4b5f5c5583c01b3d510e2bcdd7f2804b1c9788217185fa85971ead918642945",
-  "whatsnew.py": "bc3a1ce2726cdeb4ac0cc87ce8e8517f129ba17c457b2553993674854f396123"
+  "whatsnew.py": "bc3a1ce2726cdeb4ac0cc87ce8e8517f129ba17c457b2553993674854f396123",
+  "holo.py": "adc39e682d0340ef3fba401f12edb109b51205a3722f4fbc37c6e13ebcf899d5",
+  "holoview.py": "7805155a196889344158ab7fa4e7a914957564cec77c6aca0cb4edaa157ab6e2",
+  "brain3d.py": "8a3c8e91f7466f31bbe9480051dcfdd978ac714a423dcb85d9fee5fd55179632",
+  "brainbus.py": "3459a27f52e2407c49ce6fc485ace164d52892d947a728690f2b3f26a93095eb",
+  "hud56.py": "8326064c011e2d80864433501e0c54246005f4a26d3ef849236943baa5441de6",
+  "brainview.py": "a0755104f121ef88ecb8ab4cf7bbadd35ceea36f3830f7234580d57f39d01570"
  },
  "patched": {
   "camera.py": "Linux patches on v5.1 camera.py (sha256 dcbb022ef5e0ee1769bb2ebc9afe3040a50f4cbe8a62df31c5a1c7a6e759bf4e): V4L2 capture, pauses for Linux webcam apps (OBS, Discord, ...), Linux add-on message, owner's name removed from the docstring",
   "workspace.py": "Linux patches on v5.1 workspace.py (sha256 5ce01fa9b93cc7c6a654cd3c950cb3d3951eeca8758343ee92160f8667c32f92): generic quick-launch tiles (no game names), Linux add-tile hints and file filter, no Tab-screen zoom viewer on Linux; top-bar status chips stop short of the VOICE OUT selector.",
   "wsdata.py": "Linux rewrite of the platform parts of v5.1 wsdata.py (sha256 63c33a3d89a6e95ce8fc9f802c0cda80ef0a02528cbbc277f57fdb2d861beaae): GPU from nvidia-smi / amdgpu sysfs (was win32pdh), now-playing from MPRIS via playerctl (was WinRT), Linux clip folders, disk = home; Stats/recent_clips/thumbnails/Poller unchanged",
-  "whatsnew.py": "v5.1 whatsnew.py (sha256 c9379b1640516e6317ce424428f3e6806f78b5128830cddc617e8e64e17c40f6) with optional per-card lines/title/subtitle so JARVIS OS can show its own list"
- }
+  "whatsnew.py": "v5.1 whatsnew.py (sha256 c9379b1640516e6317ce424428f3e6806f78b5128830cddc617e8e64e17c40f6) with optional per-card lines/title/subtitle so JARVIS OS can show its own list",
+  "holo.py": "v5.6 holo.py (sha256 ecdbd9181e62b7796c35e314fa5cc6b9e2491f35297f6a89d327c03b6cae67d2): check_text imports the blocklists from jarvisd.safety (one level up) and refuses (checks_unavailable) if they can't load, instead of allowing",
+  "holoview.py": "v5.6 holoview.py (sha256 56ed60b4284b66309ee51e3336e787c47b8602f813522c3927fc188ac020f220): docstring only (no franchise name)",
+  "brain3d.py": "v5.6 brain3d.py (sha256 e1abe061d861748c9342679ed8b86c975b1c1511cfa7a8161a70c9ea1ddd86ef): docstring only (no franchise name)"
+ },
+ "v56_source": "JARVIS v5.6.0 (Windows): holo, holoview, brain3d, brainbus, brainview, hud56 (+ assets/coastlines_110m.json, Natural Earth 1:110m, public domain)"
 }

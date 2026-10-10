@@ -10,7 +10,7 @@
   jarvisctl workspace [toggle|open|close|status]  the workspace panel (Ctrl+Shift+J = toggle)
   jarvisctl --dry-run say "switch to windows" print the OS commands instead of running them"""
 from __future__ import annotations
-import argparse, json, sys
+import argparse, json, os, sys
 
 from .brain import LinuxBrain
 from .linux_hands import Runner
@@ -54,6 +54,10 @@ def main(argv=None):
     p = sub.add_parser("make", help="make code or an image locally (what \"Jarvis, write code for ...\" / \"make an image of ...\" do)")
     p.add_argument("what", choices=["code", "image", "status", "setup"]); p.add_argument("text", nargs="?", default="")
     p.add_argument("--no-viewer", action="store_true", help="don't open the JARVIS viewer")
+    p = sub.add_parser("eta", help="the next-update countdown: show, set VERSION PERCENT ETA_ISO [STEP], clear")
+    p.add_argument("what", choices=["show", "set", "clear"]); p.add_argument("args", nargs="*")
+    p = sub.add_parser("holo", help="the hologram workshop: list the presets, check a request, or render one to a PNG")
+    p.add_argument("what", choices=["presets", "check", "render"]); p.add_argument("args", nargs="*")
     sub.add_parser("windows", help="list the open windows (asks KWin)")
     sub.add_parser("listen", help="make the running JARVIS listen now (push-to-talk; bound to Ctrl+Shift+Space)")
     a = ap.parse_args(argv)
@@ -61,6 +65,10 @@ def main(argv=None):
         return ai_cmd(a)
     if a.cmd == "make":
         return make_cmd(a)
+    if a.cmd == "eta":
+        return eta_cmd(a)
+    if a.cmd == "holo":
+        return holo_cmd(a)
     if a.cmd == "windows":
         from . import kwin
         try:
@@ -94,6 +102,46 @@ def main(argv=None):
     elif a.cmd == "status":
         print(json.dumps({"remote": b.remote.st}, indent=1))
     return 0
+
+def eta_cmd(a):
+    from . import workshop
+    if a.what == "set":
+        if len(a.args) < 3:
+            print("usage: jarvisctl eta set VERSION PERCENT ETA_ISO [STEP]"); return 2
+        d = workshop.set_eta({"version": a.args[0], "percent": a.args[1], "eta_iso": a.args[2], "step": " ".join(a.args[3:])})
+        print(json.dumps(d) if d else "rejected: bad version, percent or ETA time"); return 0 if d else 1
+    if a.what == "clear":
+        try:
+            os.remove(os.path.join(workshop.STATE, workshop.ETA_FILE))
+        except OSError:
+            pass
+        print("countdown cleared"); return 0
+    print(workshop.eta_line(workshop.get_eta())); return 0
+
+def holo_cmd(a):
+    from . import workshop
+    from .core import holo
+    if a.what == "presets":
+        print(" ".join(holo.PRESETS)); return 0
+    text = " ".join(a.args)
+    ok, kind = workshop.check_text(text, text)
+    if a.what == "check":
+        print("OK" if ok else f"REFUSED ({kind})"); return 0 if ok else 1
+    if not ok:
+        print(f"REFUSED ({kind})"); return 1
+    out = a.args[-1] if a.args and a.args[-1].endswith(".png") else os.path.expanduser("~/hologram.png")
+    words = " ".join(a.args[:-1]) if a.args and a.args[-1].endswith(".png") else text
+    r = workshop.recipe_for(words)
+    if r is None:
+        print("no preset matches; free-form designs are made by voice (they need the coding model)"); return 1
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(r, f)
+    try:
+        from . import holowin
+        return holowin.main(["render", f.name, out])
+    finally:
+        os.remove(f.name)
 
 def ai_cmd(a):
     import os

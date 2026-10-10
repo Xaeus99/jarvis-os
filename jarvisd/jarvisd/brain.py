@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, rgb, switchos
+from . import makers, ota, rgb, switchos, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -508,6 +508,16 @@ def _handle(self, text):
     hit = parse_os(low)
     if hit:
         return self.os_action(*hit)
+    ws = getattr(self, "workshop", None)
+    if ws is None:                          # holograms, vitals, the update countdown, the 3D brain (Windows v5.6 parity)
+        from .workshop import Workshop
+        ws = self.workshop = Workshop(self)
+    said = ws.edit(text)                    # while a hologram is open: "make it purple and gold", "spin faster" ...
+    if said is not None:
+        return said
+    hit = workshop.parse(text)
+    if hit is not None:
+        return ws.handle(*hit)
     mk = makers.parse(text)                 # "write code for ...", "make an image of ..." (local, $0, safety-checked)
     if mk is not None:
         return self.makers.handle(*mk)

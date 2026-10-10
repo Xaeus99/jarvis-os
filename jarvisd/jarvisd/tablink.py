@@ -151,7 +151,7 @@ def send_result(fcfg, rcfg, result, post=replies.post, smtp=via_smtp, relay=via_
     return "+".join(routes) or "none"
 
 # ---------------------------------------------------------------- Tab's actions on Linux
-SUPPORTED = ("say", "ping", "launch", "open_url", "media", "volume", "wait", "screenshot", "sysinfo", "focus")
+SUPPORTED = ("say", "ping", "launch", "open_url", "media", "volume", "wait", "screenshot", "sysinfo", "focus", "update_eta")
 ALIASES = {"focus_window": "focus", "speak": "say", "sleep": "wait", "screen": "screenshot", "app_volume": "volume"}
 
 def sysinfo_text(what=None, windows=None, procs=None):
@@ -233,6 +233,10 @@ class ActionRunner:
                     self.say(str(a.get("text", ""))); r["ok"] = True
                 elif t == "ping":
                     r.update(ok=True, note="pong")
+                elif t == "update_eta":          # additive (Windows v5.6): the next-update countdown; nothing runs
+                    from .workshop import set_eta
+                    d = set_eta(a)
+                    r.update(ok=d is not None, note=(f"countdown set: {d['version']} {d['percent']}%" if d else "bad version/percent/eta_iso"))
                 elif t == "wait":
                     self.sleep(min(30.0, float(a.get("seconds", 1)))); r["ok"] = True
                 elif t == "launch":

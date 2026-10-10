@@ -179,6 +179,11 @@ def main():
     def speak(text):
         hud.speaking(text); voice.speak(text); hud.idle()
     brain = LinuxBrain(cfg, say=speak)
+    try:                                   # the 3D brain view's live feed (writes only while that window is open)
+        from . import brainfeed
+        log.info("brain feed hooks: %s", brainfeed.install())
+    except Exception as e:
+        log.info("brain feed: %r", e)
     def warm_obs():                       # OBS already open at login: keep its replay buffer on for "clip that"
         try: brain.studio.warm()
         except Exception as e: log.info("OBS warm-up: %r", e)
