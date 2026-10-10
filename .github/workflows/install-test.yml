@@ -4,6 +4,7 @@
 name: install-test
 on:
   workflow_dispatch: { inputs: { tag: { default: "beta" } } }
+  push: { branches: [main], paths: [".github/workflows/install-test.yml", "tools/install_test.sh", "image/disk_config/install-test.toml"] }
 permissions: { contents: read, packages: read }
 jobs:
   install:
@@ -20,7 +21,7 @@ jobs:
           chmod +x tools/*.sh; df -h /
       - name: Build the test installer ISO (bootc-image-builder, unattended free-space kickstart)
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag }}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag || 'beta' }}"
           mkdir -p output
           sudo podman pull "$IMAGE"
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \

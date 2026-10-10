@@ -3,7 +3,7 @@
 # separate manual job after the beta has booted on a test machine.
 name: build-jarvis-os
 on:
-  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md"] }
+  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md", ".github/workflows/install-test.yml", ".github/workflows/boot-test.yml", ".github/workflows/build-iso.yml", "tools/install_test.sh", "tools/boot_test.sh", "image/disk_config/**"] }
   schedule: [{ cron: "15 6 * * *" }]     # daily, after Bazzite's own nightly
   workflow_dispatch:
 permissions: { contents: read, packages: write, id-token: write }
