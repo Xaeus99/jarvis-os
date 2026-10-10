@@ -1073,13 +1073,17 @@ class TopBar(QtWidgets.QWidget):
         p.setFont(T.font("display", 9, bold=True, spacing=3)); p.setPen(_c(T.light(), 0.7))
         p.drawText(QtCore.QRectF(66, 31, 400, 14), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, "WORKSPACE  //  MARK V")
         # status chips in the middle
-        x = max(360, r.width() / 2 - 230)
         p.setFont(T.font("display", 9, bold=True, spacing=1.6))
         fm = QtGui.QFontMetricsF(p.font())
         blink = (int((_now() - self.t0) * 2) % 2) == 0
+        # chips stop short of the right-hand widgets (VOICE OUT + its combo + buttons), whatever the window width;
+        # on a narrow window they slide left (not past the wordmark) before one is dropped
+        right = self.audio_label.geometry().left() if self.audio_label.isVisible() else r.width() - 230
+        total = sum(fm.horizontalAdvance(text) + 38 for text, _on in self.chips.values())
+        x = max(330, min(r.width() / 2 - 230, right - 12 - total))
         for key, (text, on) in self.chips.items():
             w = fm.horizontalAdvance(text) + 30
-            if x + w > r.width() - 230:
+            if x + w > right - 12:
                 break
             box = QtCore.QRectF(x, 15, w, 24)
             p.setPen(QtGui.QPen(_c(m, 0.45), 1)); p.setBrush(_c(m, 0.07)); p.drawRect(box)
