@@ -39,14 +39,20 @@ jobs:
         run: |
           ls -la shots/jarvis_voice.wav || exit 0
           ffprobe -hide_banner shots/jarvis_voice.wav 2>&1 | tail -3
+          set -o pipefail
           pip install -q faster-whisper
+          # decode with ffmpeg (16 kHz mono) and hand faster-whisper the samples: the runner's PyAV is too old for it
+          ffmpeg -loglevel error -y -i shots/jarvis_voice.wav -ac 1 -ar 16000 -f s16le /tmp/voice.raw
           python3 - <<'EOF' | tee shots/voice_transcript.txt
+          import numpy as np
           from faster_whisper import WhisperModel
+          audio = np.fromfile("/tmp/voice.raw", dtype=np.int16).astype(np.float32) / 32768.0
           m = WhisperModel("base.en", device="cpu", compute_type="int8")
-          segs, info = m.transcribe("shots/jarvis_voice.wav", language="en", vad_filter=True)
+          segs, info = m.transcribe(audio, language="en", vad_filter=True)
           for s in segs:
               print(f"[{s.start:7.1f}s] {s.text.strip()}")
           EOF
+          test -s shots/voice_transcript.txt || { echo "::error::nothing JARVIS said was heard on the sound card"; exit 1; }
           { echo "### What JARVIS said (from the VM's sound card)"; echo '```'; cat shots/voice_transcript.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           ffmpeg -loglevel error -y -i shots/jarvis_voice.wav -ac 1 -b:a 64k shots/jarvis_voice.mp3 && rm shots/jarvis_voice.wav
       - uses: actions/upload-artifact@v4

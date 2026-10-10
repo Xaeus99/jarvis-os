@@ -26,7 +26,10 @@ for t in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 20; done; shot 01_login
 mon "sendkey ret"; sleep 2; typekeys "jarvis-boot-test"; mon "sendkey ret"
 sleep 60; shot 02_desktop
 # serial console: same user, same session bus
-ser ""; ser "jarvis" 3; ser "jarvis-boot-test" 6
+# the serial login takes ~30 s before the shell prompt appears (the Bazzite banner waits on hostnamed); anything
+# typed before the prompt is swallowed, so wait for the first prompt instead of a fixed sleep
+wait_shell() { local i; for i in $(seq 1 60); do grep -aq '@bazzite ~\]\$' "$OUT/serial.log" && { echo "shell ready after ~$((i*2)) s"; sleep 2; return 0; }; sleep 2; done; echo "no shell prompt after 120 s"; }
+ser ""; ser "jarvis" 3; ser "jarvis-boot-test" 2; wait_shell
 ser 'export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus' 1
 mark "SOUND CARD"; ser 'pactl list short sinks; pactl list short sources' 3
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2

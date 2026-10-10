@@ -24,7 +24,10 @@ typekeys "jarvis-boot-test"; mon "sendkey ret"
 for t in 1 2 3 4 5 6 7 8 9; do sleep 20; shot "$(printf '%02d' $((12+t)))_desktop_$((t*20))s"; done
 # diagnostics over the serial console: log in as the test user and dump what failed
 ser() { printf '%s\r' "$1" | socat - UNIX-CONNECT:/tmp/qser.sock >/dev/null 2>&1; sleep "${2:-2}"; }
-ser ""; ser "jarvis" 3; ser "jarvis-boot-test" 6
+# the serial login takes ~30 s before the shell prompt appears (the Bazzite banner waits on hostnamed); anything
+# typed before the prompt is swallowed, so wait for the first prompt instead of a fixed sleep
+wait_shell() { local i; for i in $(seq 1 60); do grep -aq '@bazzite ~\]\$' "$OUT/serial.log" && { echo "shell ready after ~$((i*2)) s"; sleep 2; return 0; }; sleep 2; done; echo "no shell prompt after 120 s"; }
+ser ""; ser "jarvis" 3; ser "jarvis-boot-test" 2; wait_shell
 ser "echo jarvis-boot-test | sudo -S true" 4
 ser "sudo systemctl --no-pager --failed; sudo journalctl -b --no-pager -u jarvis-grub-theme -u tuned-ppd | tail -40" 6
 ser "systemctl --no-pager --machine=jarvis@ --user status jarvisd jarvis-first-boot-apps jarvis-first-login-tuning 2>&1 | head -60" 6
