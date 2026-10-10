@@ -42,6 +42,7 @@ def main(argv=None):
     p.add_argument("--bitlocker", action="store_true", help="Windows is BitLocker-encrypted: unlock it read-only with its recovery key")
     p.add_argument("--windows-root", default=None, help="an already-mounted Windows drive (default: mount it read-only)")
     p.add_argument("--config", default=None); p.add_argument("--first-boot", action="store_true")
+    p = sub.add_parser("dnd-hold", help="hold Do Not Disturb until stopped (used by stream mode)"); p.add_argument("reason", nargs="?", default="Streaming")
     p = sub.add_parser("workspace", help="the workspace panel (Ctrl+Shift+J runs `jarvisctl workspace toggle`)")
     p.add_argument("what", nargs="?", default="toggle", choices=["toggle", "open", "close", "status"])
     a = ap.parse_args(argv)
@@ -49,6 +50,9 @@ def main(argv=None):
         return link(a)
     if a.cmd == "workspace":
         return workspace_cmd(a)
+    if a.cmd == "dnd-hold":
+        from .gaming import dnd_hold
+        return dnd_hold(a.reason)
     run = DryRun() if a.dry_run else Runner()
     b = LinuxBrain(run=run, ask=(lambda q: (print("JARVIS asks:", q), "yes")[1]) if a.yes else (lambda q: (print("JARVIS asks:", q), "")[1]))
     if a.cmd == "say":

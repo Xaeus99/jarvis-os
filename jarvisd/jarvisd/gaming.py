@@ -31,16 +31,30 @@ def mode_steps(kind, on, cfg=None):
         if kind == "stream":
             steps.append(["pw-metadata", "-n", "settings", "0", "clock.force-quantum", str(cfg.get("stream_quantum", 256))])
             steps.append(["balooctl6", "suspend"])                          # file indexer off while live
-            steps.append(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications",
-                          "--object-path", "/org/freedesktop/Notifications", "--method",
-                          "org.freedesktop.Notifications.Inhibit", "jarvis", "Streaming", "{}"])
+            # Do Not Disturb: Plasma releases an Inhibit the moment the caller's D-Bus connection closes, so a
+            # one-shot `gdbus call` did nothing. A small user unit holds it for as long as stream mode is on.
+            steps.append(["systemd-run", "--user", "--unit=jarvis-dnd", "--collect", "--quiet",
+                          "/usr/bin/jarvisctl", "dnd-hold", "Streaming"])
     else:
         steps.append(["powerprofilesctl", "set", cfg.get("normal_profile", "balanced")])
         if cfg.get("game_scheduler"):
             steps.append(["pkexec", "scxctl", "stop"])
         steps.append(["pw-metadata", "-n", "settings", "0", "clock.force-quantum", "0"])
         steps.append(["balooctl6", "resume"])
+        steps.append(["systemctl", "--user", "stop", "jarvis-dnd.service"])   # ends Do Not Disturb (no-op if off)
     return steps
+
+def dnd_hold(reason="Streaming"):
+    """Hold Plasma's Do Not Disturb until this process is stopped (run as the jarvis-dnd user unit)."""
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtDBus import QDBusConnection, QDBusInterface
+    app = QCoreApplication.instance() or QCoreApplication([])
+    iface = QDBusInterface("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                           "org.freedesktop.Notifications", QDBusConnection.sessionBus())
+    reply = iface.call("Inhibit", "jarvis", reason, {})
+    if reply.errorMessage():
+        print("Do Not Disturb not available:", reply.errorMessage()); return 1
+    return app.exec()
 
 def set_mode(run, kind, on, cfg=None, state_path=None):
     """Runs the steps; returns (ok_count, failed_steps). Remembers the notification-inhibit cookie to release it."""

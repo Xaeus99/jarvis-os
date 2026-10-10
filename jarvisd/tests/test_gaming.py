@@ -46,14 +46,21 @@ def test_game_mode_on_off_is_reversible(tmp_path):
 
 def test_stream_mode_lowers_latency_holds_notifications_and_releases_them(tmp_path):
     st = str(tmp_path / "mode.json")
-    r = Rec({("gdbus",): (0, "(uint32 7,)")})
+    r = Rec()
     ok, failed = gaming.set_mode(r, "stream", True, {}, st)
     assert ["pw-metadata", "-n", "settings", "0", "clock.force-quantum", "256"] in r.calls
     assert ["balooctl6", "suspend"] in r.calls and not failed
-    assert json.load(open(st))["inhibit_cookie"] == 7
+    # Do Not Disturb is held by a long-running user unit (a one-shot D-Bus call is released as soon as it exits)
+    assert any(c[:3] == ["systemd-run", "--user", "--unit=jarvis-dnd"] and "dnd-hold" in c for c in r.calls)
     r2 = Rec()
     gaming.set_mode(r2, "stream", False, {}, st)
-    assert any("UnInhibit" in " ".join(c) and c[-1] == "7" for c in r2.calls)
+    assert ["systemctl", "--user", "stop", "jarvis-dnd.service"] in r2.calls
+
+def test_dnd_hold_command_exists():
+    from jarvisd import cli
+    import pytest
+    with pytest.raises(SystemExit):
+        cli.main(["dnd-hold", "--help"])
 
 def test_scheduler_only_when_opted_in(tmp_path):
     assert not any("scxctl" in " ".join(s) for s in gaming.mode_steps("game", True, {}))
