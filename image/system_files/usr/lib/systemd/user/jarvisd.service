@@ -2,16 +2,16 @@
 Description=J.A.R.V.I.S. voice daemon
 After=graphical-session.target pipewire.service
 PartOf=graphical-session.target
+# crash loop guard, same idea as the Windows watchdog (5 restarts in 10 minutes); these belong in [Unit]
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
 WorkingDirectory=/usr/lib/jarvis-os
 ExecStart=/usr/lib/jarvis-os/venv/bin/python -m jarvisd.daemon
 Restart=on-failure
-RestartSec=3
-# crash loop guard, same idea as the Windows watchdog (5 restarts in 10 minutes)
-StartLimitIntervalSec=600
-StartLimitBurst=5
+RestartSec=10
 
 [Install]
 WantedBy=graphical-session.target

@@ -35,7 +35,10 @@ sleep 75
 } >> /var/log/jarvis-install-report.txt 2>&1
 sleep 300   # after the CI has logged in: what the first login did (Tab link, Windows drive, welcome apps)
 { echo "--- after login $(date -Is)"; systemctl --no-pager --failed
-  journalctl -b --no-pager | grep -i -E "jarvis|udisks|polkit|portal@autostart|plasma-login-wallpaper" | grep -v -i vulkan | tail -60
+  for u in jarvisd jarvis-link jarvis-hud jarvis-indicator jarvis-first-boot-apps jarvis-first-login-tuning; do
+    echo "-- $u"; journalctl -b --no-pager _SYSTEMD_USER_UNIT=$u.service | grep -v -E '^\s+(File|\^|~)' | tail -12
+  done
+  echo "-- udisks / polkit / welcome app"; journalctl -b --no-pager | grep -i -E "udisks|polkit.*(mount|auth)|portal@autostart" | tail -20
   cat /etc/plasmalogin.conf 2>&1 | head -20
 } >> /var/log/jarvis-install-report.txt 2>&1
 EOF

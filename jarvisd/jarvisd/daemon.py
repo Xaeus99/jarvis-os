@@ -87,6 +87,20 @@ class MicSource:
     def read(self):
         return self.q.get()
 
+def open_mic(device=None, wait_s=30.0, make=None, sleep=time.sleep):
+    """Open the microphone, waiting for one if there is none yet (a PC without a mic, or a headset not plugged in).
+    Before: jarvisd exited and systemd restarted it every few seconds, re-loading the speech model each time."""
+    make = make or MicSource
+    said = False
+    while True:
+        try:
+            return make(device)
+        except Exception as e:
+            if not said:
+                log.warning("no microphone yet (%s); JARVIS starts listening as soon as one is plugged in", e)
+                said = True
+            sleep(wait_s)
+
 def wire_tab(cfg, brain, speak, state_dir, listener_cls=None, send_result=None):
     """Connect the brain to Tab: forward unknown phrases, speak Tab's replies, run Tab's (safe) actions and send the
     sealed results back. Returns (forwarder, listener); both None when this PC isn't linked yet."""
@@ -124,6 +138,14 @@ def main():
     from .voice_out import Speaker
     cfg_path = os.path.join(os.path.expanduser("~"), ".config", "jarvis", "config.json")
     cfg = json.load(open(cfg_path)) if os.path.exists(cfg_path) else {}
+    hud, voice = HudBus(), Speaker(cfg)
+    def speak(text):
+        hud.speaking(text); voice.speak(text); hud.idle()
+    brain = LinuxBrain(cfg, say=speak)
+    _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
+    if listener is not None:
+        listener.start()          # Tab's replies are spoken even while there's no microphone
+    mic = open_mic(cfg.get("mic_device"))
     from faster_whisper import WhisperModel
     whisper = WhisperModel(cfg.get("whisper_model", "base.en"), device="cpu", compute_type="int8")
     models = os.environ.get("JARVIS_MODELS", "/usr/lib/jarvis-os/models")
@@ -131,14 +153,7 @@ def main():
     def stt(audio):
         segs, _ = whisper.transcribe(audio.astype(np.float32) / 32768.0, language="en", beam_size=1)
         return " ".join(s.text for s in segs)
-    hud, voice = HudBus(), Speaker(cfg)
-    def speak(text):
-        hud.speaking(text); voice.speak(text); hud.idle()
-    brain = LinuxBrain(cfg, say=speak)
-    _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
-    if listener is not None:
-        listener.start()
-    Daemon(MicSource(cfg.get("mic_device")), wake, stt, brain, hud=hud).run()
+    Daemon(mic, wake, stt, brain, hud=hud).run()
 
 if __name__ == "__main__":
     sys.exit(main())
