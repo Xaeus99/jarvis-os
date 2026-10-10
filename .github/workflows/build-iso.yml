@@ -80,7 +80,9 @@ jobs:
           rm -f "dist/$ISO"
           cp isoboot/installer_screen.png "$OUTDIR/installer-screen.png" 2>/dev/null || true
           FLAGS="--latest=false --prerelease"; [ "$CHANNEL" = stable ] && FLAGS="--latest"
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" $FLAGS \
+          # no --target: the tag goes on main's current head. Tagging an older commit whose workflow files differ from
+          # main's is refused for the workflow token without the "workflows" permission (HTTP 403, run 38069274774).
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" $FLAGS \
             --title "JARVIS OS ${VERSION} installer (${CHANNEL})" --notes-file "$OUTDIR/NOTES.md"
           for f in "$OUTDIR"/get-jarvis-os.bat "$OUTDIR"/get-jarvis-os.sh "$OUTDIR"/SHA256SUMS "$OUTDIR"/installer-screen.png "$OUTDIR"/*.part*; do
             [ -f "$f" ] || continue
