@@ -63,6 +63,8 @@ def parse_os(low):
         return "apps_install", {}
     if F(r"(?:what(?:'s| is) )?(?:my |the )?gpu (?:temp|temperature|usage|load)|how hot is (?:my |the )?(?:gpu|graphics card)", t):
         return "gpu_stats", {}
+    if F(r"what(?:'s| is| has) new(?: (?:in|with) (?:jarvis(?: os)?|you|the system|this update))?|(?:show (?:me )?)?what'?s new|what changed(?: in the update)?", t):
+        return "whats_new", {}
     m = F(r"(?:switch|change|go|cut|flip)(?: over)? (?:the )?(?:obs )?(?:scene )?to (?:the |my )?(.+?) scene", t) or \
         F(r"(?:switch|change|set) (?:the )?(?:obs )?scene to (?:the |my )?(.+)", t) or F(r"(?:obs )?scene (.+)", t)
     if m:
@@ -230,6 +232,13 @@ class LinuxBrain:
             code, out = self.run(argv)
             what = "off" if x.get("off") else x.get("color") or f"the {x.get('profile')} profile"
             return self.say(f"Lights set to {what}, {s}." if code == 0 else f"OpenRGB didn't answer, {s}. Is it running?")
+        if action == "whats_new":
+            from . import whatsnew
+            try:
+                whatsnew.open_card(launch=None if isinstance(self.run, Runner) else self.run)
+            except Exception as e:
+                log.info("what's new card: %r", e)
+            return self.say(whatsnew.SPOKEN)
         if action == "obs_scene":
             return self.say(self.studio.scene(x["name"], s))
         if action == "gpu_stats":

@@ -59,7 +59,9 @@ def load_fonts(QtGui, T):
                     fams.update(QtGui.QFontDatabase.applicationFontFamilies(fid) if fid >= 0 else [])
     fams.update(QtGui.QFontDatabase.families())
     if "Orbitron" in fams: T.DISPLAY = "Orbitron"
+    raj = sorted(f for f in fams if f.startswith("Rajdhani"))   # fontconfig names the static files "Rajdhani Medium"/"SemiBold"
     if "Rajdhani" in fams: T.BODY = "Rajdhani"
+    elif raj: T.BODY = "Rajdhani Medium" if "Rajdhani Medium" in raj else raj[0]
 
 class Follower:
     """Applies hud.json to the overlay; decides when the ring is visible (pure logic, tested without a screen)."""
@@ -105,6 +107,11 @@ def main(argv=None):
     hud = overlay.Overlay({**cfg.get("overlay", {}), **cfg.get("hud", {})})
     fol = Follower(hud, cfg.get("hud", {}))
     timer = QtCore.QTimer(); timer.timeout.connect(lambda: fol.tick(read_state())); timer.start(100)
+    try:                                   # first login after a JARVIS OS update: the "what's new" card, once
+        from . import whatsnew
+        app._whats_new = whatsnew.maybe_show(QtCore)
+    except Exception as e:
+        log.info("what's new: %r", e)
     return app.exec()
 
 def render_png(path, state="speaking", caption="", heard="", theme="vibranium", size=320):
