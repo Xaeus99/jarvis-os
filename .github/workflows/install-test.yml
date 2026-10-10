@@ -27,7 +27,7 @@ jobs:
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ./image/disk_config/install-test.toml:/config.toml:ro -v ./output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --use-librepo=True "$IMAGE"
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True "$IMAGE"
           sudo chown -R "$USER" output; ls -la output/bootiso
           sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h /
       - name: Dummy Windows disk

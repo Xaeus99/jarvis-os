@@ -16,7 +16,7 @@ jobs:
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ./image/disk_config/iso.toml:/config.toml:ro -v ./output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --use-librepo=True \
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
             $IMAGE:${{ inputs.tag }}
       - uses: actions/upload-artifact@v4
         with: { name: jarvis-os-iso, path: output/bootiso/*.iso }
