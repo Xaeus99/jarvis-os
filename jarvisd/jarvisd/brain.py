@@ -247,6 +247,14 @@ def _execute_intent(self, it):
         return self.say(f"Opening {name}, {s}." if code == 0 else f"I couldn't find {name}, {s}.")
     if k == "close_app":
         return self.say(f"Closing apps by voice comes in the next build, {s}.")
+    if k == "weather":
+        line = self.weather_line(tomorrow="tomorrow" in (it.raw or "").lower())
+        if line:
+            return self.say(line)
+        if self.forward:                      # no city on this PC yet: Tab can still answer
+            self.forward(it.raw or "what's the weather")
+            return self.say(f"I don't have your city on this system yet, {s}, so I've asked Tab.")
+        return self.say(f"I don't know your city yet, {s}. Run `jarvisctl link --from-windows`, or put it in the config under briefing.")
     if k in ("time", "date"):
         import datetime
         now = datetime.datetime.now()
@@ -283,5 +291,15 @@ def _handle(self, text):
     it = commands.parse(text, app_names=tuple(APPS))
     return self._execute_intent(it)
 
+def _weather_line(self, tomorrow=False):
+    """Same as Windows: Open-Meteo for the city in config["briefing"] (only its coordinates are sent). None if no city."""
+    from .core import weather
+    try:
+        return weather.spoken(self.cfg.get("briefing") or {}, tomorrow=tomorrow)
+    except Exception as e:
+        log.info("weather: %r", e)
+        return f"I couldn't reach the weather service just now, {self.sir}."
+
+LinuxBrain.weather_line = _weather_line
 LinuxBrain._execute_intent = _execute_intent
 LinuxBrain.handle = _handle

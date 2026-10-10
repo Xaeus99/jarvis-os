@@ -259,6 +259,10 @@ def import_link(win_cfg_path, linux_cfg_path):
     for k in ("piper_voice", "piper_speed"):
         if k in a:
             cfg.setdefault("assistant", {})[k] = a[k]
+    b = src.get("briefing") or {}                 # the weather city (only its coordinates are ever sent anywhere)
+    for k in ("city", "latitude", "longitude", "units"):
+        if k in b:
+            cfg.setdefault("briefing", {})[k] = b[k]
     os.makedirs(os.path.dirname(linux_cfg_path), exist_ok=True)
     tmp = linux_cfg_path + ".tmp"
     with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
