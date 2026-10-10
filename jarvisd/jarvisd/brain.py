@@ -11,6 +11,8 @@ from .remote_control import RemoteControl
 log = logging.getLogger("jarvisd.brain")
 
 OS_DESTRUCTIVE = {"switch_windows", "reboot_bios", "rollback", "reboot_update"}
+# the shared v5.1 command kinds JARVIS OS runs locally (everything else the shared parser knows goes to Tab)
+LOCAL_KINDS = {"workspace_open", "workspace_close"}
 
 def parse_os(low):
     """JARVIS OS-only phrases. Returns (action, extra) or None."""
@@ -79,6 +81,26 @@ class LinuxBrain:
         self.bootc = ota.Bootc(self.run)
         self.remote = RemoteControl(os.path.join(self.state_dir, "remote.json"),
                                     stop_injection=lambda: self.run(["systemctl", "--user", "stop", "ydotoold.service"]))
+
+    def panel(self, what):
+        """Open / close / toggle the workspace panel process (single instance, see workspace.py)."""
+        from . import workspace
+        return workspace.control(what, run=self.run)
+
+    def local_action(self, it):
+        s, k = self.sir, it.kind
+        if k in ("workspace_open", "workspace_close"):
+            opening = k == "workspace_open"
+            try:
+                vis, how = self.panel("open" if opening else "close")
+            except Exception as e:
+                log.info("workspace %s failed: %r", k, e); vis, how = None, "failed"
+            if opening and how == "failed":
+                return self.say(f"I couldn't bring up the workspace, {s}. Ctrl Shift J should do it.")
+            if opening:
+                return self.say(f"Workspace online, {s}.")
+            return self.say(f"Workspace closed, {s}. I'm still listening.")
+        return self.say(f"That one isn't available on Linux yet, {s}.")
 
     def say(self, text):
         self.spoken.append(text); self._say(text); return text
@@ -222,6 +244,8 @@ MEDIA = {"play_pause": "play-pause", "next": "next", "previous": "previous", "pr
 
 def _execute_intent(self, it):
     s = self.sir; k = it.kind
+    if k in LOCAL_KINDS:
+        return self.local_action(it)
     if k == "qol":
         return self.qol.handle(it, self.ask)
     if k == "volume":

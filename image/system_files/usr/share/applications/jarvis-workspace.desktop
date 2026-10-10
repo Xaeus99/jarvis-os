@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=J.A.R.V.I.S. Workspace
+Comment=Open or close the J.A.R.V.I.S. workspace panel
+Exec=jarvisctl workspace toggle
+Icon=preferences-desktop-theme-global
+Categories=Utility;
+Keywords=jarvis;workspace;dashboard;
+StartupNotify=false
+# KDE registers this as a global shortcut (Settings > Keyboard > Shortcuts lists it); a Wayland app can't grab keys itself
+X-KDE-Shortcuts=Ctrl+Shift+J

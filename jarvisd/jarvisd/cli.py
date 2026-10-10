@@ -7,6 +7,7 @@
   jarvisctl link --from-windows               link to the same Tab as Windows JARVIS (reads the Windows drive read-only)
   jarvisctl link --from-windows --bitlocker   same, when Windows is BitLocker-encrypted (asks for its 48-digit recovery key)
   jarvisctl link --code 7KQ2-M9XD-R4TB        link with a one-time code from Tab (no Windows needed)
+  jarvisctl workspace [toggle|open|close|status]  the workspace panel (Ctrl+Shift+J = toggle)
   jarvisctl --dry-run say "switch to windows" print the OS commands instead of running them"""
 from __future__ import annotations
 import argparse, json, sys
@@ -41,9 +42,13 @@ def main(argv=None):
     p.add_argument("--bitlocker", action="store_true", help="Windows is BitLocker-encrypted: unlock it read-only with its recovery key")
     p.add_argument("--windows-root", default=None, help="an already-mounted Windows drive (default: mount it read-only)")
     p.add_argument("--config", default=None); p.add_argument("--first-boot", action="store_true")
+    p = sub.add_parser("workspace", help="the workspace panel (Ctrl+Shift+J runs `jarvisctl workspace toggle`)")
+    p.add_argument("what", nargs="?", default="toggle", choices=["toggle", "open", "close", "status"])
     a = ap.parse_args(argv)
     if a.cmd == "link":
         return link(a)
+    if a.cmd == "workspace":
+        return workspace_cmd(a)
     run = DryRun() if a.dry_run else Runner()
     b = LinuxBrain(run=run, ask=(lambda q: (print("JARVIS asks:", q), "yes")[1]) if a.yes else (lambda q: (print("JARVIS asks:", q), "")[1]))
     if a.cmd == "say":
@@ -57,6 +62,12 @@ def main(argv=None):
     elif a.cmd == "status":
         print(json.dumps({"remote": b.remote.st}, indent=1))
     return 0
+
+def workspace_cmd(a):
+    from . import workspace
+    vis, how = workspace.control(a.what, run=None if a.dry_run else Runner())
+    print(json.dumps({"visible": vis, "how": how}))
+    return 1 if how == "failed" else 0
 
 def apps_install(run, a):
     import os

@@ -1,0 +1,13 @@
+[Unit]
+Description=J.A.R.V.I.S. workspace panel (started on demand by Ctrl+Shift+J / "Jarvis, open the workspace")
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/jarvis-os
+# XWayland, like the HUD: a Wayland client can't restore its own window position or raise itself
+Environment=QT_QPA_PLATFORM=xcb
+ExecStart=/usr/lib/jarvis-os/venv/bin/python -m jarvisd.workspace
+Restart=on-failure
+RestartSec=3
