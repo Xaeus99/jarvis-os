@@ -25,8 +25,37 @@ Plan about **2 hours**. Nothing here deletes Windows. The only thing that gets e
       Leave the new space **Unallocated**. Don't format it.
   - *Windows offers less than you asked for?* Open Terminal (Admin) and run `powercfg /h off`, turn off System
     Protection for C: for now, run Disk Cleanup, restart, try again. Turn them back on afterwards.
-- [ ] **Make the USB stick:** download the JARVIS OS ISO from the release page, then write it with
+- [ ] **Download the installer** (see *Getting the installer* below), then **make the USB stick:** write the ISO with
       [Fedora Media Writer](https://fedoraproject.org/workstation/download) (*Select .iso file*) or Rufus (DD mode).
+
+## Getting the installer (no GitHub account needed)
+The installer is one ISO file of about 6.6 GB. GitHub only allows files under 2 GB on a release, so the ISO is
+published in **4 parts** on this repository's **Releases** page (the *Releases* link on the right of the main page;
+the newest *stable* one is marked **Latest**; *pre-release* ones are test builds). Anyone can download them; you
+don't need to sign in.
+
+**Easy way (Windows):** download **`get-jarvis-os.bat`** from the release's *Assets* into a folder with about 15 GB
+free, and double-click it. If the browser warns about the file, choose *Keep*; if Windows says *"Windows protected
+your PC"*, click *More info > Run anyway* (it's a plain text script, right-click > *Edit* shows every line). It
+downloads the 4 parts (about 6.6 GB; a part that's already there is skipped, so it can be re-run after a dropped
+connection), joins them into `jarvis-os-<version>-x86_64.iso` and checks the SHA-256. It ends with **OK**. Then the
+`.part` files can be deleted.
+
+**By hand (Windows):** download all `.part` files into one folder, open Command Prompt there and join them in order:
+
+```
+copy /b jarvis-os-<version>-x86_64.iso.part0+jarvis-os-<version>-x86_64.iso.part1+jarvis-os-<version>-x86_64.iso.part2+jarvis-os-<version>-x86_64.iso.part3 jarvis-os-<version>-x86_64.iso
+```
+
+(The release notes have this line with the real file names, ready to copy.) Check it in PowerShell:
+`Get-FileHash jarvis-os-<version>-x86_64.iso` must print the SHA-256 from the release notes / `SHA256SUMS`.
+
+**Linux / macOS:** `sh get-jarvis-os.sh`, or `cat` the parts in order into one file and compare `sha256sum` with
+`SHA256SUMS`.
+
+How it's made: the `build-iso` workflow builds the ISO from the signed image, boots it in a virtual PC up to the
+installer's first screen, then splits it (`tools/release/make_release.py`, which also checks that the parts join
+back to the exact ISO) and publishes the release. `image/disk_config/release.env` says which image goes in.
 
 ## Install (about 30–45 minutes)
 - [ ] Restart and tap the **boot-menu key** (F11 on most ASRock and MSI boards, F12 on many others). Pick the

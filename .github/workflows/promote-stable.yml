@@ -1,0 +1,31 @@
+# Promotes one tested beta image to the :stable tag (what release ISOs install and what installed systems follow).
+# Runs when image/disk_config/stable.env changes: STABLE_DIGEST=sha256:... must be an image this repo built and
+# signed. The tag is moved with --preserve-digests, so the cosign signature (made on the digest) stays valid and
+# `bootc upgrade` on installed systems accepts it (policy: sigstoreSigned, matchRepository).
+name: promote-stable
+on:
+  push: { branches: [main], paths: ["image/disk_config/stable.env", ".github/workflows/promote-stable.yml"] }
+permissions: { contents: read, packages: write }
+concurrency: { group: promote-stable, cancel-in-progress: false }
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+      - name: Promote
+        run: |
+          [ -f image/disk_config/stable.env ] && . image/disk_config/stable.env
+          if [ -z "${STABLE_DIGEST:-}" ]; then echo "no STABLE_DIGEST set; nothing to promote"; exit 0; fi
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
+          echo "${{ secrets.GITHUB_TOKEN }}" | skopeo login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign verify --key cosign.pub "$IMAGE@$STABLE_DIGEST" > /dev/null && echo "signature on $STABLE_DIGEST verified"
+          OLD=$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:stable" 2>/dev/null || echo none)
+          skopeo copy --all --preserve-digests "docker://$IMAGE@$STABLE_DIGEST" "docker://$IMAGE:stable"
+          NEW=$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:stable")
+          [ "$NEW" = "$STABLE_DIGEST" ] || { echo "::error::stable points at $NEW, not $STABLE_DIGEST"; exit 1; }
+          cosign verify --key cosign.pub "$IMAGE:stable" > /dev/null && echo "stable verifies with cosign.pub"
+          VERSION=$(skopeo inspect --format '{{index .Labels "org.opencontainers.image.version"}}' "docker://$IMAGE:stable" 2>/dev/null || true)
+          { echo "### :stable promoted"; echo "- was: $OLD"; echo "- now: $IMAGE@$NEW ${VERSION:+($VERSION)}"
+            echo "- ${STABLE_NOTE:-}"; } >> "$GITHUB_STEP_SUMMARY"
