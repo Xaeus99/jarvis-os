@@ -17,8 +17,11 @@ autopart --type=btrfs --noswap
 bootloader --append="console=tty0 console=ttyS0,115200"
 user --name=jarvis --password=jarvis-install-test --plaintext --groups=wheel
 rootpw --lock
+# a text-mode install would otherwise leave the system booting to a text console (multi-user.target)
+xconfig --startxonboot
 poweroff
 %post --log=/var/log/jarvis-install-test-post.log
+systemctl set-default graphical.target
 # test-only: write a diagnostics report on every boot, read back from the disk by the CI host
 cat > /etc/jarvis-install-report.sh <<'EOF'
 #!/usr/bin/bash

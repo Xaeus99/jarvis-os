@@ -64,7 +64,10 @@ prepare)
 fingerprint)
   D=$1; F=$2; loopup "$D"; M=/tmp/m; sudo mkdir -p $M
   { echo "# partition table (Windows partitions 1-4 must keep start/end/type/GUID)"
-    for n in 1 2 3 4; do sudo sgdisk -i$n "$D" | grep -E "GUID code|unique GUID|First sector|Last sector|Partition name"; done
+    # the ESP (1) is shared: Linux adds its own boot files there and the installer may re-case its GPT name
+    # ("EFI system partition" -> "EFI System Partition"), which Windows never reads; its name is listed under info
+    sudo sgdisk -i1 "$D" | grep -E "GUID code|unique GUID|First sector|Last sector"
+    for n in 2 3 4; do sudo sgdisk -i$n "$D" | grep -E "GUID code|unique GUID|First sector|Last sector|Partition name"; done
     echo "# raw sha256 of the Windows partitions"
     for n in 2 3 4; do echo "p$n $(sudo sha256sum "${LOOP}p$n" | cut -d' ' -f1)"; done
     echo "# Windows boot files on the EFI system partition"
@@ -74,6 +77,7 @@ fingerprint)
     (cd "$T" && find EFI -maxdepth 2 -ipath 'EFI/Boot/*' -type f -exec sha256sum {} + | sort -k2)
     echo "# everything on the ESP (info only)"; (cd "$T" && find . -type f | sort); rm -rf "$T"
   } > "$F"
+  echo "# ESP GPT name (info): $(sudo sgdisk -i1 "$D" | sed -n "s/^Partition name: //p")" >> "$F"
   echo "# all partitions now (info)" >> "$F"; sudo sgdisk -p "$D" >> "$F"; sudo blkid "${LOOP}"p* >> "$F"
   loopdown; cat "$F" ;;
 install)

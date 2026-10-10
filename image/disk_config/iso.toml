@@ -7,6 +7,8 @@
 [customizations.installer.kickstart]
 contents = '''
 %post --log=/var/log/jarvis-os-install-post.log
+# boot to the desktop even if the installer ran in text mode (it would pick a text console otherwise)
+systemctl set-default graphical.target
 # Secure Boot: queue the Universal Blue kernel key for enrollment (same as Bazzite's own installer).
 # On the first reboot a blue "MOK management" screen asks for it: Enroll MOK > Continue > password universalblue.
 KEY=/etc/pki/akmods/certs/akmods-ublue.der
