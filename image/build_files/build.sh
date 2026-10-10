@@ -8,7 +8,7 @@ cp -a /ctx/system_files/. /
 chmod 0755 /usr/libexec/jarvis-os/*
 
 # 2. Packages layered on Bazzite (each is in Fedora's repos; OpenRGB may already be present on Bazzite)
-dnf5 -y install openrgb ydotool playerctl wl-clipboard python3-pip efibootmgr || dnf5 -y install ydotool playerctl wl-clipboard python3-pip efibootmgr
+dnf5 -y install openrgb ydotool playerctl wl-clipboard python3-pip efibootmgr espeak-ng || dnf5 -y install ydotool playerctl wl-clipboard python3-pip efibootmgr espeak-ng
 rpm -q openrgb || echo "WARN: openrgb not installed from repos; jarvisd falls back to the OpenRGB Flatpak"
 
 # 3. The JARVIS daemon in its own venv under /usr/lib (read-only at runtime, replaced atomically by updates)
@@ -29,7 +29,7 @@ cd /usr/lib/jarvis-os && exec /usr/lib/jarvis-os/venv/bin/python -m jarvisd "$@"
 EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
-systemctl --global enable jarvisd.service jarvis-indicator.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
+systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
 systemctl enable jarvis-grub-theme.service
 
 # 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);

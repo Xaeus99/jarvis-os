@@ -4,6 +4,7 @@
   jarvisctl status                            remote-control state + OS image versions
   jarvisctl apps install                      install the JARVIS OS app list from Flathub (first boot does this once)
   jarvisctl games restore [--mount C=/path]   queue this PC's Windows Steam games for download on Linux
+  jarvisctl link --from-windows               link to the same Tab as Windows JARVIS (reads the Windows drive read-only)
   jarvisctl --dry-run say "switch to windows" print the OS commands instead of running them"""
 from __future__ import annotations
 import argparse, json, sys
@@ -33,7 +34,12 @@ def main(argv=None):
     p = sub.add_parser("games"); p.add_argument("what", choices=["restore", "list"])
     p.add_argument("--mount", action="append", default=[], help="LETTER=/path of an already-mounted Windows drive")
     p.add_argument("--steamapps", default=None)
+    p = sub.add_parser("link"); p.add_argument("--from-windows", action="store_true", required=True)
+    p.add_argument("--windows-root", default=None, help="an already-mounted Windows drive (default: mount it read-only)")
+    p.add_argument("--config", default=None); p.add_argument("--first-boot", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "link":
+        return link(a)
     run = DryRun() if a.dry_run else Runner()
     b = LinuxBrain(run=run, ask=(lambda q: (print("JARVIS asks:", q), "yes")[1]) if a.yes else (lambda q: (print("JARVIS asks:", q), "")[1]))
     if a.cmd == "say":
@@ -97,3 +103,22 @@ def games(run, a):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+def link(a):
+    """Copy only the Tab link (mailbox, relay, reply topic and key) from Windows JARVIS's config.json."""
+    import os, subprocess
+    from . import tablink
+    cfg_path = a.config or os.path.expanduser("~/.config/jarvis/config.json")
+    done = os.path.expanduser("~/.local/state/jarvis/link.done")
+    root = a.windows_root or tablink.mount_windows_ro()
+    found = tablink.find_windows_configs(root) if root else []
+    if not found:
+        print("No Windows JARVIS found" + (f" on {root}" if root else " (no Windows drive could be mounted)") +
+              ". Link later with: jarvisctl link --from-windows")
+        return 0 if a.first_boot else 1
+    cfg = tablink.import_link(found[0], cfg_path)
+    to = cfg.get("forwarding", {}).get("to", "")
+    print(f"Linked to Tab ({to.split('@')[0][:2]}…@{to.split('@')[-1]}) from {found[0]}; settings in {cfg_path}")
+    os.makedirs(os.path.dirname(done), exist_ok=True); open(done, "w").write(found[0] + "\n")
+    subprocess.run(["systemctl", "--user", "try-restart", "jarvisd.service"], capture_output=True)
+    return 0

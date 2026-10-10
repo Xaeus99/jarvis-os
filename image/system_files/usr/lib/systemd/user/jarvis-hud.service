@@ -1,0 +1,16 @@
+[Unit]
+Description=J.A.R.V.I.S. HUD ring (pops up while JARVIS listens, thinks or speaks)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/jarvis-os
+# XWayland: a plain Wayland client can't pin itself to a screen corner or stay on top
+Environment=QT_QPA_PLATFORM=xcb
+ExecStart=/usr/lib/jarvis-os/venv/bin/python -m jarvisd.hud
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=JARVIS OS: link to the same Tab as the Windows JARVIS on this PC (reads Windows read-only, once)
+After=graphical-session.target
+ConditionPathExists=!%h/.local/state/jarvis/link.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/jarvisctl link --from-windows --first-boot
+
+[Install]
+WantedBy=graphical-session.target
