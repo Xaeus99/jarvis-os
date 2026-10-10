@@ -64,3 +64,9 @@ echo "IMAGE_REPO=${IMAGE_REPO}" >> /usr/lib/jarvis-os/version
 # 7. Repo hygiene: a repo whose GPG key file is missing breaks the installer build (bootc-image-builder
 #    depsolves Anaconda from these repos); disable such repos. Updates come as whole signed images anyway.
 python3 /ctx/fix_repos.py
+
+# 8. Login screen: the JARVIS wallpaper behind whichever SDDM theme the base ships
+for t in /usr/share/sddm/themes/*/; do
+  [ -f "${t}theme.conf" ] || continue
+  printf '[General]\nbackground=/usr/share/wallpapers/JARVIS/contents/images/2560x1440.png\ntype=image\n' > "${t}theme.conf.user"
+done

@@ -7,7 +7,8 @@ DST=/boot/grub2/themes/jarvis
 # bootc/ostree keep /boot read-only; open it only for the copy and close it again
 ro=0
 if findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro; then mount -o remount,rw /boot && ro=1; fi
-trap '[ "$ro" = 1 ] && mount -o remount,ro /boot' EXIT
+trap 'if [ "$ro" = 1 ]; then mount -o remount,ro /boot || :; fi' EXIT
+set -x   # each step lands in the journal (journalctl -u jarvis-grub-theme)
 if ! cmp -s "$SRC/theme.txt" "$DST/theme.txt" 2>/dev/null; then
   mkdir -p "$DST"; cp -a "$SRC/." "$DST/"
   changed=1

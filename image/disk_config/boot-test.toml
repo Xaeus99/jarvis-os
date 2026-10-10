@@ -8,6 +8,6 @@ groups = ["wheel"]
 mountpoint = "/"
 minsize = "40 GiB"
 
-# serial console so the CI can log in over ttyS0 and dump diagnostics (test disk only)
+# serial console + the journal on it, so the CI log shows why a service failed (test disk only)
 [customizations.kernel]
-append = "console=tty0 console=ttyS0,115200"
+append = "console=tty0 console=ttyS0,115200 systemd.journald.forward_to_console=1"
