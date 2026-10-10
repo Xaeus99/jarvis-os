@@ -20,7 +20,9 @@ mon() { echo "$1" | socat - UNIX-CONNECT:$MON >/dev/null 2>&1; }
 shot() { mon "screendump /tmp/s.ppm"; sleep 1; convert /tmp/s.ppm "$OUT/$1.png" 2>/dev/null && echo "shot $1"; }
 typekeys() { local s=$1 i c; for ((i=0; i<${#s}; i++)); do c=${s:i:1}; [ "$c" = "-" ] && c=minus; mon "sendkey $c"; sleep 0.15; done; }
 ser() { printf '%s\r' "$1" | socat - UNIX-CONNECT:/tmp/qser.sock >/dev/null 2>&1; sleep "${2:-2}"; }
-mark() { ser "echo ==== $1 ==== \$(date +%T)" 1; }
+# the label goes to the VM's shell inside single quotes (any ' in it is dropped), so labels with ( ) & ; or $ in them
+# print as written instead of being parsed ("EXCHANGE 3 (age-appropriate guard)" was a bash syntax error)
+mark() { local l=${1//\'/}; ser "echo '==== $l ====' \$(date +%T)" 1; }
 sleep 4; shot 00_firmware
 for t in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 20; done; shot 01_login
 mon "sendkey ret"; sleep 2; typekeys "jarvis-boot-test"; mon "sendkey ret"
