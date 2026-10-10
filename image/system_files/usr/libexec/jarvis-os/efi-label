@@ -1,0 +1,99 @@
+#!/usr/bin/python3
+"""Name this system's firmware (UEFI) boot entry "JARVIS OS".
+
+The installer creates the entry with the base distro's name ("Bazzite"). efibootmgr can't rename an
+entry, so this adds a "JARVIS OS" entry pointing at the same partition and loader, puts it exactly where
+the old one sat in BootOrder, and only then removes the old one -- there is never a moment without a
+bootable entry. Only entries that load \EFI\fedora\... are considered; Windows Boot Manager and every other
+entry are never touched. Idempotent: does nothing once the name is right. Usage: efi-label [--dry-run]
+"""
+import os
+import re
+import subprocess
+import sys
+
+WANT = "JARVIS OS"
+OLD_NAMES = {"bazzite", "fedora", "fedora linux", "bazzite-deck", "jarvis os"}
+LINE = re.compile(r"^Boot([0-9A-Fa-f]{4})(\*?)\s+(.+?)\s+HD\((\d+),GPT,([0-9A-Fa-f-]{36}),[^)]*\)/(?:File\()?(\\[^\s)]+)", re.M)
+
+
+def parse(text):
+    """efibootmgr -v output -> (BootOrder list, entries [{num, active, label, part, partuuid, loader}])"""
+    order = []
+    m = re.search(r"^BootOrder:\s*([0-9A-Fa-f,]+)", text, re.M)
+    if m:
+        order = [x.upper() for x in m.group(1).split(",") if x]
+    entries = [dict(num=a.upper(), active=bool(b), label=c.strip(), part=int(d), partuuid=e.lower(), loader=f)
+               for a, b, c, d, e, f in LINE.findall(text)]
+    return order, entries
+
+
+def ours(e):
+    return e["loader"].lower().startswith("\\efi\\fedora\\") and e["label"].lower() in OLD_NAMES
+
+
+def plan(text):
+    """What to do: ('ok', None) | ('dedupe', [nums to delete]) | ('rename', old_entry) | ('none', None)"""
+    order, entries = parse(text)
+    mine = [e for e in entries if ours(e)]
+    if not mine:
+        return "none", None
+    named = [e for e in mine if e["label"] == WANT]
+    others = [e for e in mine if e["label"] != WANT]
+    if named:
+        keep = named[0]
+        same = [e["num"] for e in others + named[1:]
+                if e["partuuid"] == keep["partuuid"] and e["loader"].lower() == keep["loader"].lower()]
+        return ("dedupe", same) if same else ("ok", None)
+    # rename the one that boots first
+    others.sort(key=lambda e: order.index(e["num"]) if e["num"] in order else 999)
+    return "rename", others[0]
+
+
+def sh(*args):
+    return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+
+
+def disk_of(partuuid):
+    dev = os.path.realpath("/dev/disk/by-partuuid/" + partuuid)
+    pk = sh("lsblk", "-no", "PKNAME", dev).strip().splitlines()[0]
+    return "/dev/" + pk
+
+
+def main():
+    dry = "--dry-run" in sys.argv
+    if not os.path.isdir("/sys/firmware/efi/efivars"):
+        print("not a UEFI boot; nothing to do"); return 0
+    before = sh("efibootmgr", "-v")
+    what, arg = plan(before)
+    print("plan:", what, arg)
+    if dry or what in ("ok", "none"):
+        return 0
+    if what == "dedupe":
+        for n in arg:
+            sh("efibootmgr", "-q", "-b", n, "-B")
+        return 0
+    old = arg
+    order, _ = parse(before)
+    sh("efibootmgr", "-q", "--create", "--disk", disk_of(old["partuuid"]), "--part", str(old["part"]),
+       "--loader", old["loader"], "--label", WANT)
+    after = sh("efibootmgr", "-v")
+    _, now = parse(after)
+    new = [e for e in now if e["label"] == WANT and e["partuuid"] == old["partuuid"]
+           and e["loader"].lower() == old["loader"].lower()]
+    if not new:
+        print("could not find the new entry; leaving the old one in place", file=sys.stderr); return 1
+    newnum = new[0]["num"]
+    neworder = [newnum if n == old["num"] else n for n in order if n != newnum] or [newnum]
+    sh("efibootmgr", "-q", "--bootorder", ",".join(neworder))
+    sh("efibootmgr", "-q", "-b", old["num"], "-B")
+    print("renamed Boot%s %r -> Boot%s %r; BootOrder %s" % (old["num"], old["label"], newnum, WANT, ",".join(neworder)))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as e:
+        print("efibootmgr/lsblk failed:", e, e.stderr, file=sys.stderr)
+        sys.exit(1)

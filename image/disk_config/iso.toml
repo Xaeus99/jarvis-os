@@ -6,9 +6,12 @@
 # system at this image's registry tag for updates.
 [customizations.installer.kickstart]
 contents = '''
+network --hostname=jarvis-os
 %post --log=/var/log/jarvis-os-install-post.log
 # boot to the desktop even if the installer ran in text mode (it would pick a text console otherwise)
 systemctl set-default graphical.target
+# firmware boot entry: "JARVIS OS" instead of the base's name (jarvis-boot-names.service re-checks every boot)
+/usr/libexec/jarvis-os/efi-label || :
 # Secure Boot: queue the Universal Blue kernel key for enrollment (same as Bazzite's own installer).
 # On the first reboot a blue "MOK management" screen asks for it: Enroll MOK > Continue > password universalblue.
 KEY=/etc/pki/akmods/certs/akmods-ublue.der

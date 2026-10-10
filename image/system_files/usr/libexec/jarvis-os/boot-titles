@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Boot-menu names. bootc/ostree keep two systems: the one that boots by default and the previous one
+# (the rollback safety net, also created on first boot when kernel options are applied). Both entries get
+# the same title from os-release, which looks like a duplicate "JARVIS OS" in the menu. This renames them
+#   "JARVIS OS <version> (Vibranium)"                        <- default
+#   "JARVIS OS <version> (Vibranium) - previous (rollback)"   <- the one before
+# ostree writes fresh entries on every update; this runs at boot and again at shutdown right after an
+# update is finalized (jarvis-boot-names.service), so the menu after an update is already named.
+set -euo pipefail
+DIR="${JARVIS_BLS_DIR:-/boot/loader/entries}"
+[ -d "$DIR" ] || exit 0
+ro=0
+if [ -z "${JARVIS_BLS_DIR:-}" ] && findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro; then mount -o remount,rw /boot && ro=1; fi
+trap 'if [ "$ro" = 1 ]; then mount -o remount,ro /boot || :; fi' EXIT
+for f in "$DIR"/ostree-*.conf; do
+  [ -f "$f" ] || continue
+  t="$(sed -n 's/^title[[:space:]]\+//p' "$f" | head -n1)"
+  case "$t" in
+    *"(ostree:0)"*|*"(ostree:0:"*) new="$(printf '%s' "$t" | sed -E 's/ *\(ostree:0(:[^)]*)?\)$//')" ;;
+    *"(ostree:"[1-9]*) new="$(printf '%s' "$t" | sed -E 's/ *\(ostree:[0-9]+(:[^)]*)?\)$//') - previous (rollback)" ;;
+    *) continue ;;
+  esac
+  [ "$new" = "$t" ] && continue
+  esc="$(printf '%s' "$new" | sed -e 's/[|&\\]/\\&/g')"
+  sed -i "s|^title[[:space:]].*|title ${esc}|" "$f"
+  echo "$(basename "$f"): $t -> $new"
+done

@@ -30,7 +30,7 @@ EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
 systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
-systemctl enable jarvis-grub-theme.service
+systemctl enable jarvis-grub-theme.service jarvis-boot-names.service
 
 # 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);
 #     the wallpaper is set per user by usr/share/plasma/shells/.../updates/jarvis-os-wallpaper.js
@@ -41,6 +41,8 @@ kwriteconfig6 --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage or
 sed -i -e 's/^PRETTY_NAME=.*/PRETTY_NAME="JARVIS OS '"${JARVIS_OS_VERSION}"' (Vibranium)"/' \
        -e 's/^NAME=.*/NAME="JARVIS OS"/' /usr/lib/os-release
 echo "JARVIS_OS_VERSION=${JARVIS_OS_VERSION}" > /usr/lib/jarvis-os/version
+# default computer name (the installer and Settings can change it); the base ships "bazzite"
+echo jarvis-os > /etc/hostname
 
 # 6. Update trust: only images signed with this project's cosign key are accepted by `bootc upgrade/switch`
 : "${IMAGE_REPO:=ghcr.io/example/jarvis-os}"
