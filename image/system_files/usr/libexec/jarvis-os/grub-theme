@@ -4,6 +4,10 @@
 set -euo pipefail
 SRC=/usr/share/grub/themes/jarvis
 DST=/boot/grub2/themes/jarvis
+# bootc/ostree keep /boot read-only; open it only for the copy and close it again
+ro=0
+if findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro; then mount -o remount,rw /boot && ro=1; fi
+trap '[ "$ro" = 1 ] && mount -o remount,ro /boot' EXIT
 if ! cmp -s "$SRC/theme.txt" "$DST/theme.txt" 2>/dev/null; then
   mkdir -p "$DST"; cp -a "$SRC/." "$DST/"
   changed=1
