@@ -1,13 +1,22 @@
-# bootc-image-builder installer config. Partitioning is left to the user on purpose (dual boot):
-# the installer must NEVER auto-wipe the disk. The tutorial walks through "Install alongside Windows"
-# into the free space made by shrinking C: in Windows Disk Management.
+# bootc-image-builder installer config for the real installer ISO (build-iso workflow).
+# Partitioning is left to the person on purpose (dual boot): the installer must NEVER auto-wipe a disk,
+# so there is no clearpart/autopart here and `unattended` is never set (it would add "clearpart --all").
+# The tutorial walks through "Installation destination > the unallocated space only".
+# bootc-image-builder adds the payload itself (ostreecontainer from the ISO) and points the installed
+# system at this image's registry tag for updates.
 [customizations.installer.kickstart]
-contents = """
-%post
-bootc switch --mutate-in-place --transport registry ghcr.io/REPO_OWNER/jarvis-os:stable
+contents = '''
+%post --log=/var/log/jarvis-os-install-post.log
+# Secure Boot: queue the Universal Blue kernel key for enrollment (same as Bazzite's own installer).
+# On the first reboot a blue "MOK management" screen asks for it: Enroll MOK > Continue > password universalblue.
+KEY=/etc/pki/akmods/certs/akmods-ublue.der
+[ -f "$KEY" ] || KEY=$(find /etc/pki /usr/share -name 'akmods-ublue*.der' 2>/dev/null | head -1)
+if [ -n "$KEY" ] && [ -d /sys/firmware/efi/efivars ]; then
+  mokutil --timeout -1 || :
+  printf 'universalblue\nuniversalblue\n' | mokutil --import "$KEY" || :
+fi
 %end
-"""
+'''
 
 [customizations.installer.modules]
-enable = ["org.fedoraproject.Anaconda.Modules.Storage"]
-disable = ["org.fedoraproject.Anaconda.Modules.Users"]
+enable = ["org.fedoraproject.Anaconda.Modules.Storage", "org.fedoraproject.Anaconda.Modules.Users"]

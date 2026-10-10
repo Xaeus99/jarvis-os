@@ -1,0 +1,47 @@
+# CI ONLY (install-test workflow): an unattended install into the FREE SPACE of a disk that already holds a
+# dummy Windows (ESP + MSR + NTFS C: + NTFS recovery). It proves the installer leaves every Windows
+# partition byte-for-byte unchanged. Never used for a real install: the real ISO (iso.toml) is interactive.
+#   clearpart --none   -> no existing partition is removed or formatted
+#   autopart           -> new partitions only in unallocated space (Anaconda's "free space" mode)
+# This first variant runs without Secure Boot, so the Secure Boot key step of iso.toml is left out here.
+[customizations.installer.kickstart]
+contents = '''
+text
+lang en_US.UTF-8
+keyboard us
+timezone America/New_York --utc
+network --bootproto=dhcp --activate
+ignoredisk --only-use=vda
+clearpart --none
+autopart --type=btrfs --noswap
+bootloader --append="console=tty0 console=ttyS0,115200"
+user --name=jarvis --password=jarvis-install-test --plaintext --groups=wheel
+rootpw --lock
+poweroff
+%post --log=/var/log/jarvis-install-test-post.log
+# test-only: write a diagnostics report on every boot, read back from the disk by the CI host
+cat > /etc/jarvis-install-report.sh <<'EOF'
+#!/usr/bin/bash
+sleep 75
+{ echo "=== boot $(date -Is)"; cat /usr/lib/jarvis-os/version; efibootmgr -v; lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS
+  cat /proc/cmdline; systemctl --no-pager --failed
+  journalctl -b --no-pager -u jarvis-grub-theme -u tuned -u tuned-ppd | tail -80
+  echo "--- grub.cfg"; grep -n -i -E "theme|windows|menuentry|blscfg|timeout|source" /boot/grub2/grub.cfg
+  ls -la /boot/grub2 /boot/grub2/themes 2>&1
+  echo "--- /etc/default/grub"; cat /etc/default/grub; rpm-ostree status | head -12
+} >> /var/log/jarvis-install-report.txt 2>&1
+EOF
+chmod +x /etc/jarvis-install-report.sh
+cat > /etc/systemd/system/jarvis-install-report.service <<'EOF'
+[Unit]
+Description=CI install-test report
+After=graphical.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /etc/jarvis-install-report.sh
+[Install]
+WantedBy=graphical.target
+EOF
+systemctl enable jarvis-install-report.service
+%end
+'''

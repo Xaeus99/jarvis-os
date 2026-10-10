@@ -7,3 +7,7 @@ groups = ["wheel"]
 [[customizations.filesystem]]
 mountpoint = "/"
 minsize = "40 GiB"
+
+# serial console so the CI can log in over ttyS0 and dump diagnostics (test disk only)
+[customizations.kernel]
+append = "console=tty0 console=ttyS0,115200"

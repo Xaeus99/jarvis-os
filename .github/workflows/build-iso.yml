@@ -1,6 +1,6 @@
 # Builds the installer ISO (Anaconda) from the published image with bootc-image-builder.
 name: build-iso
-on: { workflow_dispatch: { inputs: { tag: { default: "stable" } } } }
+on: { workflow_dispatch: { inputs: { tag: { default: "beta" } } } }
 permissions: { contents: read, packages: read }
 jobs:
   iso:

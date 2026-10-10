@@ -1,0 +1,64 @@
+# Dual-boot install test: builds an installer ISO from the published image, installs it unattended into the
+# free space of a virtual disk that already holds a dummy Windows, then boots the result twice.
+# Pass = every Windows partition and Windows boot file has the same sha256 before and after.
+name: install-test
+on:
+  workflow_dispatch: { inputs: { tag: { default: "beta" } } }
+permissions: { contents: read, packages: read }
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ublue-os/remove-unwanted-software@v9
+      - name: Tools (KVM, QEMU, OVMF, NTFS, GPT)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat ntfs-3g gdisk dosfstools mtools btrfs-progs parted
+          chmod +x tools/*.sh; df -h /
+      - name: Build the test installer ISO (bootc-image-builder, unattended free-space kickstart)
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag }}"
+          mkdir -p output
+          sudo podman pull "$IMAGE"
+          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
+            -v ./image/disk_config/install-test.toml:/config.toml:ro -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --use-librepo=True "$IMAGE"
+          sudo chown -R "$USER" output; ls -la output/bootiso
+          sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h /
+      - name: Dummy Windows disk
+        run: |
+          mkdir -p shots
+          if sudo install -d -o "$USER" /mnt/work; then D=/mnt/work/disk.raw; else D=$PWD/disk.raw; fi
+          echo "DISK=$D" >> "$GITHUB_ENV"
+          tools/install_test.sh prepare "$D"
+          tools/install_test.sh fingerprint "$D" shots/fingerprint_before.txt
+      - name: Install (unattended, free space only)
+        run: tools/install_test.sh install "$DISK" output/bootiso/install.iso shots
+      - name: Windows untouched after install?
+        run: |
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_install.txt
+          sudo sgdisk -p "$DISK"
+      - name: First boot (theme service runs, report written)
+        run: tools/install_test.sh boot "$DISK" shots boot1
+      - name: Second boot (themed menu with Windows entry, desktop)
+        run: tools/install_test.sh boot "$DISK" shots boot2
+      - name: Verdict
+        run: |
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_boots.txt
+          tools/install_test.sh collect "$DISK" shots
+          ok=1
+          for f in after_install after_boots; do
+            if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_$f.txt); then
+              echo "PASS ($f): Windows partitions (MSR, C:, Recovery), their table entries and Windows Boot Manager files are byte-identical"
+            else echo "::error::Windows changed ($f)"; ok=0; fi
+          done
+          echo "--- EFI/Boot fallback before/after (informational)"; grep -A3 '^# EFI/Boot' shots/fingerprint_before.txt shots/fingerprint_after_boots.txt
+          echo "### install-test: $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
+          [ $ok = 1 ]
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: install-test, path: shots/ }
