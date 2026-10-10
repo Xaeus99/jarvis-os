@@ -24,9 +24,9 @@ terminal-box: "terminal_box_*.png"
     color = "#B060FF"
 }
 + boot_menu {
-    left = 30%
+    left = 20%
     top = 50%
-    width = 40%
+    width = 60%
     height = 30%
     item_font = "Rajdhani Regular 28"
     selected_item_font = "Rajdhani Regular 28"
