@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Name this system's firmware (UEFI) boot entry "JARVIS OS".
+r"""Name this system's firmware (UEFI) boot entry "JARVIS OS".
 
 The installer creates the entry with the base distro's name ("Bazzite"). efibootmgr can't rename an
 entry, so this adds a "JARVIS OS" entry pointing at the same partition and loader, puts it exactly where

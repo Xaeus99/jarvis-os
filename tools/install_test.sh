@@ -86,8 +86,8 @@ install)
        -serial file:"$OUT/serial_install.log" -no-reboot
   shot i00_firmware; sleep 12; shot i01_iso_menu
   mon "sendkey up"; sleep 0.5; mon "sendkey ret"          # the "Install" entry (skip the media check)
-  t=0; while alive && [ $t -lt 5400 ]; do sleep 60; t=$((t+60)); shot "$(printf 'i%02d_install_%04ds' $((t/60+1)) $t)"; done
-  if alive; then echo "::error::installer still running after 90 min"; mon quit; exit 1; fi
+  t=0; while alive && [ $t -lt 2400 ]; do sleep 60; t=$((t+60)); shot "$(printf 'i%02d_install_%04ds' $((t/60+1)) $t)"; done
+  if alive; then echo "::error::installer still running after 40 min (a normal install takes ~5)"; mon quit; exit 1; fi
   echo "installer powered the VM off after ~${t}s" ;;
 boot)
   D=$1; OUT=$2; TAG=$3; mkdir -p "$OUT"
