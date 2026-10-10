@@ -108,3 +108,15 @@ def test_icon_for_returns_real_icons_or_none(tmp_path):
         assert icon_for({"target": ""}) is None
     finally:
         del os.environ["XDG_DATA_HOME"]
+
+
+def test_link_chip():
+    assert workspace.link_chip({}) == "STANDALONE"
+    assert workspace.link_chip({"forwarding": {"to": "a@b.invalid"}}) == "TAB LINK READY"
+
+def test_jarvisctl_windows(monkeypatch, capsys):
+    from jarvisd import cli
+    monkeypatch.setattr(kwin, "list_windows", lambda run=None: kwin.parse({"windows": WINS})["windows"])
+    assert cli.main(["windows"]) == 0
+    out = capsys.readouterr().out
+    assert "* discord: Discord" in out and "[minimized]" in out

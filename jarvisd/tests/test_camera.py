@@ -1,3 +1,4 @@
+import os
 import datetime, os, threading
 import numpy as np
 import pytest
@@ -91,8 +92,15 @@ def test_no_video_device_means_opencv_is_never_asked(tmp_path, monkeypatch):
     from jarvisd.core import camera as core_cam
     opened = []
     monkeypatch.setattr(core_cam.FaceWatcher, "_open", lambda self: opened.append(1) or "cap")
-    W = camera.quiet_watcher_cls(dev_root=str(tmp_path))
+    dev, sysc = tmp_path / "dev", tmp_path / "sys" / "class" / "video4linux"
+    dev.mkdir(); sysc.mkdir(parents=True)
+    W = camera.quiet_watcher_cls(dev_root=str(dev), sys_root=str(sysc))
     w = W.__new__(W)
     assert w._open() is None and opened == []
-    (tmp_path / "video0").write_text("")
+    # the OBS virtual camera (v4l2loopback) is a /dev/video0 under /sys/devices/virtual: not a webcam
+    virt = tmp_path / "sys" / "devices" / "virtual" / "video4linux" / "video0"; virt.mkdir(parents=True)
+    (dev / "video0").write_text(""); os.symlink(virt, sysc / "video0")
+    assert w._open() is None and opened == []
+    usb = tmp_path / "sys" / "devices" / "pci0000:00" / "usb1" / "1-1" / "video4linux" / "video2"; usb.mkdir(parents=True)
+    (dev / "video2").write_text(""); os.symlink(usb, sysc / "video2")
     assert w._open() == "cap" and opened == [1]

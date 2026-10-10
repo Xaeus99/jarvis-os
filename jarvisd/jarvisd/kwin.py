@@ -119,7 +119,8 @@ def main(argv=None):
 def _child(args, run=subprocess.run, timeout=8):
     env = dict(os.environ); env.setdefault("QT_QPA_PLATFORM", "offscreen")
     try:
-        p = run([sys.executable, "-m", "jarvisd.kwin"] + args, capture_output=True, text=True, timeout=timeout, env=env)
+        p = run([sys.executable, "-m", "jarvisd.kwin"] + args, capture_output=True, text=True, timeout=timeout, env=env,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     except (OSError, subprocess.TimeoutExpired) as e:
         raise KWinUnavailable(f"window list helper failed: {e!r}")
     try:

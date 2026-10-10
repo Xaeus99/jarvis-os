@@ -226,6 +226,10 @@ def make_icon_for(QtGui, QtWidgets, QtCore):
         return None
     return icon_for
 
+def link_chip(cfg):
+    """The top bar's Tab chip: v5.1 always said "TAB LINK READY"; JARVIS OS also runs standalone."""
+    return "TAB LINK READY" if ((cfg or {}).get("forwarding") or {}).get("to") else "STANDALONE"
+
 def detached(argv):
     from .studio import detached as d
     return d(argv)
@@ -321,6 +325,7 @@ def _real_window(cfg, QtWidgets, QtCore):
         from .core import weather
         return weather.panel_data(cfg.get("briefing") or {})
     w.start_data(weather_fn=weather_fn, clip_folders_fn=wsdata.clip_folders, thumbs_dir=os.path.join(STATE, "workspace", "thumbs"))
+    w.top.set_chip("tab", link_chip(cfg))
     mirror = HudMirror(w, hud.read_state)
     t = QtCore.QTimer(w); t.timeout.connect(mirror.tick); t.start(150)
     w._mirror = mirror

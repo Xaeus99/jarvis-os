@@ -50,10 +50,19 @@ def main(argv=None):
     p.add_argument("--first-boot", action="store_true")
     p = sub.add_parser("tell", help="say something to the running JARVIS (as if spoken); it answers out loud")
     p.add_argument("text")
+    sub.add_parser("windows", help="list the open windows (asks KWin)")
     sub.add_parser("listen", help="make the running JARVIS listen now (push-to-talk; bound to Ctrl+Shift+Space)")
     a = ap.parse_args(argv)
     if a.cmd == "ai":
         return ai_cmd(a)
+    if a.cmd == "windows":
+        from . import kwin
+        try:
+            for w in kwin.list_windows():
+                print(("* " if w.get("active") else "  ") + f"{w.get('app') or '?'}: {w.get('title')}" + (" [minimized]" if w.get("minimized") else ""))
+            return 0
+        except kwin.KWinUnavailable as e:
+            print("No window list:", e); return 1
     if a.cmd in ("tell", "listen"):
         from . import ipc
         r = ipc.send("daemon", {"cmd": "say", "text": a.text} if a.cmd == "tell" else {"cmd": "listen"})

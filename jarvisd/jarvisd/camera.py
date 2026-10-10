@@ -17,19 +17,28 @@ def available():
     except Exception:
         return False
 
-def has_device(dev_root="/dev"):
+def has_device(dev_root="/dev", sys_root="/sys/class/video4linux"):
+    """A real webcam is plugged in: a /dev/video* node whose device isn't virtual. v4l2loopback (the OBS virtual
+    camera, loaded on JARVIS OS) creates /dev/video0 under /sys/devices/virtual, and OpenCV can't capture from it."""
     try:
-        return any(n.startswith("video") for n in os.listdir(dev_root))
+        nodes = [n for n in os.listdir(dev_root) if n.startswith("video")]
     except OSError:
         return False
+    if not os.path.isdir(sys_root):
+        return bool(nodes)
+    for n in nodes:
+        real = os.path.realpath(os.path.join(sys_root, n))
+        if os.path.exists(real) and "/devices/virtual/" not in real:
+            return True
+    return False
 
-def quiet_watcher_cls(dev_root="/dev"):
+def quiet_watcher_cls(dev_root="/dev", sys_root="/sys/class/video4linux"):
     """The v5.1 FaceWatcher, but it only asks OpenCV to open a webcam when /dev has a video device. Without one,
     OpenCV's V4L2 backend logs two warnings on every 3-minute re-check (seen in boot-test run 38070835970)."""
     from .core.camera import FaceWatcher
     class QuietFaceWatcher(FaceWatcher):
         def _open(self):
-            if not has_device(dev_root):
+            if not has_device(dev_root, sys_root):
                 return None
             return super()._open()
     return QuietFaceWatcher

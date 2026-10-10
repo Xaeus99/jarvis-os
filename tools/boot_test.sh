@@ -31,9 +31,9 @@ ser "systemctl --no-pager --machine=jarvis@ --user status jarvisd jarvis-first-b
 ser "cat /usr/lib/jarvis-os/version; rpm-ostree status --booted | head -8" 4
 # window list from the real KWin (jarvisd/kwin.py) and the workspace panel on the real desktop (Ctrl+Shift+J path)
 ser 'export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus' 1
-ser 'echo KWIN_LIST_BEGIN; /usr/lib/jarvis-os/venv/bin/python -m jarvisd.kwin list; echo KWIN_RC=$?' 10
+ser 'echo KWIN_LIST_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 ser 'jarvisctl workspace toggle; echo WORKSPACE_RC=$?' 12
 shot 22_workspace_panel; sleep 10; shot 23_workspace_panel
-ser 'echo KWIN_LIST2_BEGIN; /usr/lib/jarvis-os/venv/bin/python -m jarvisd.kwin list; echo KWIN_RC=$?' 10
+ser 'echo KWIN_LIST2_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 mon "quit"; wait $QPID 2>/dev/null
 ls -la "$OUT"
