@@ -13,7 +13,9 @@ log = logging.getLogger("jarvisd.brain")
 OS_DESTRUCTIVE = {"switch_windows", "reboot_bios", "rollback", "reboot_update"}
 # the shared v5.1 command kinds JARVIS OS runs locally (everything else the shared parser knows goes to Tab)
 LOCAL_KINDS = {"workspace_open", "workspace_close", "stream_start", "stream_stop", "record_start", "record_stop", "clip",
-               "learn_face", "forget_face", "camera_on", "camera_off"}
+               "learn_face", "forget_face", "camera_on", "camera_off", "open_clips", "clips_folder",
+               "copilot", "copilot_ask", "copilot_open", "audio_mirror"}
+NOT_ON_LINUX = {"copilot": "Copilot", "copilot_ask": "Copilot", "copilot_open": "Copilot", "audio_mirror": "Audio mirroring"}
 
 def parse_os(low):
     """JARVIS OS-only phrases. Returns (action, extra) or None."""
@@ -135,7 +137,36 @@ class LinuxBrain:
             return self.say(self.studio.clip(s))
         if k in ("learn_face", "forget_face", "camera_on", "camera_off"):
             return self.camera_action(k)
+        if k in ("open_clips", "clips_folder"):
+            return self.clips(k == "clips_folder")
+        if k in NOT_ON_LINUX:
+            log.info("%s asked for; Windows-only", k)
+            return self.say(f"{NOT_ON_LINUX[k]} isn't available on Linux yet, {s}. Say \u201cswitch to Windows\u201d if you need it now.")
         return self.say(f"That one isn't available on Linux yet, {s}.")
+
+    def clips(self, folder_only=False):
+        """ "Open my last clip" / "open my clips folder": OBS's recording folder first, then Videos/Captures etc."""
+        from .core import wsdata
+        s = self.sir
+        folders = []
+        try:
+            if self.studio.obs_running():
+                d = self.studio.record_dir()
+                if d:
+                    folders.append(d)
+        except Exception as e:
+            log.info("OBS record dir: %r", e)
+        folders += [f for f in wsdata.clip_folders() if f not in folders]
+        if folder_only:
+            if not folders:
+                return self.say(f"I can't find a clips folder yet, {s}. OBS saves to the folder set in its Settings, Output.")
+            self.launch(["xdg-open", folders[0]])
+            return self.say(f"Your clips folder, {s}.")
+        clips = wsdata.recent_clips(folders, limit=1)
+        if not clips:
+            return self.say(f"I can't find any clips yet, {s}. Say \u201cclip that\u201d while OBS is open.")
+        self.launch(["xdg-open", clips[0][0]])
+        return self.say(f"Your latest clip, {s}.")
 
     def camera_action(self, k):
         s, cam = self.sir, getattr(self, "camera", None)

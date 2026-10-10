@@ -153,3 +153,22 @@ def test_voice_routes(brain_factory, rec):
     assert b.studio.calls == [("start", "stream"), ("stop", "stream"), ("start", "record"), ("stop", "record"), ("clip",),
                               ("scene", "gameplay"), ("scene", "just chatting")]
     assert "switch_windows" == __import__("jarvisd.brain", fromlist=["x"]).parse_os("switch to windows")[0]
+
+
+def test_open_clips_and_folder(brain_factory, rec, tmp_path, monkeypatch):
+    from jarvisd.core import wsdata
+    cap = tmp_path / "Videos" / "Captures"; cap.mkdir(parents=True)
+    b = brain_factory(rec)
+    monkeypatch.setattr(wsdata, "clip_folders", lambda xcfg=None, home=None: [str(cap)])
+    b.studio = type("S", (), {"obs_running": lambda self: False})()
+    assert "can't find any clips" in b.handle("open my last clip")
+    (cap / "Replay.mkv").write_bytes(b"x")
+    assert b.handle("open my last clip") == "Your latest clip, sir."
+    assert ["xdg-open", str(cap / "Replay.mkv")] in rec.calls
+    assert b.handle("open my clips folder") == "Your clips folder, sir." and ["xdg-open", str(cap)] in rec.calls
+
+def test_windows_only_kind_says_so(brain_factory, rec):
+    from jarvisd.core import commands
+    b = brain_factory(rec)
+    it = commands.Intent("copilot_open")
+    assert "isn't available on Linux yet" in b.local_action(it)
