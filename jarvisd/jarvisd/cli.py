@@ -110,11 +110,13 @@ def link(a):
     from . import tablink
     cfg_path = a.config or os.path.expanduser("~/.config/jarvis/config.json")
     done = os.path.expanduser("~/.local/state/jarvis/link.done")
-    root = a.windows_root or tablink.mount_windows_ro()
+    root = a.windows_root or tablink.mount_windows_ro(interactive=not a.first_boot)
     found = tablink.find_windows_configs(root) if root else []
     if not found:
-        print("No Windows JARVIS found" + (f" on {root}" if root else " (no Windows drive could be mounted)") +
-              ". Link later with: jarvisctl link --from-windows")
+        why = f" on {root}" if root else " (no Windows drive could be mounted)"
+        if not root and tablink.bitlocker_present():
+            why = " (the Windows drive is BitLocker-encrypted, so Linux can't read it)"
+        print("No Windows JARVIS found" + why + ". Link later with: jarvisctl link --from-windows")
         return 0 if a.first_boot else 1
     cfg = tablink.import_link(found[0], cfg_path)
     to = cfg.get("forwarding", {}).get("to", "")

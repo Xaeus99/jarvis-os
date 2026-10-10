@@ -123,3 +123,24 @@ def test_wire_tab_unlinked(tmp_path):
     b = LinuxBrain({}, state_dir=str(tmp_path), run=lambda argv, timeout=15, input_text=None: (0, ""))
     assert daemon.wire_tab({}, b, lambda t: None, str(tmp_path)) == (None, None)
     assert b.forward is None
+
+
+def test_first_login_mount_never_prompts():
+    calls = []
+    class R:
+        def __init__(self, out): self.stdout = out
+    def run(argv, **k):
+        calls.append(argv)
+        if argv[0] == "lsblk":
+            return R(json.dumps({"blockdevices": [{"path": "/dev/x", "fstype": "disk", "size": 1, "children": [
+                {"path": "/dev/x3", "fstype": "ntfs", "size": 100, "mountpoint": None}]}]}))
+        return R("Error: Not authorized")
+    assert tablink.mount_windows_ro(run=run, interactive=False) is None
+    assert "--no-user-interaction" in calls[-1]
+    tablink.mount_windows_ro(run=run)
+    assert "--no-user-interaction" not in calls[-1]
+
+def test_bitlocker_detected():
+    class R:
+        stdout = "vfat\n\nBitLocker\nntfs\n"
+    assert tablink.bitlocker_present(run=lambda *a, **k: R())

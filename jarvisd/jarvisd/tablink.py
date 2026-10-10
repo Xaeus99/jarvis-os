@@ -270,8 +270,18 @@ def import_link(win_cfg_path, linux_cfg_path):
     os.replace(tmp, linux_cfg_path)
     return cfg
 
-def mount_windows_ro(run=subprocess.run):
-    """Mount the biggest NTFS partition read-only with udisks (no root needed). Returns the mount point or None."""
+def bitlocker_present(run=subprocess.run):
+    """True when a BitLocker-encrypted partition is on this PC (its files can't be read from Linux without the key)."""
+    try:
+        out = run(["lsblk", "-n", "-o", "FSTYPE"], capture_output=True, text=True).stdout
+    except Exception:
+        return False
+    return any(l.strip().lower() == "bitlocker" for l in (out or "").splitlines())
+
+def mount_windows_ro(run=subprocess.run, interactive=True):
+    """Mount the biggest NTFS partition read-only with udisks (no root needed). Returns the mount point or None.
+    interactive=False (the automatic first-login link) never pops a password dialog: if mounting the internal
+    drive needs one, it just doesn't mount, and `jarvisctl link --from-windows` can be run later by hand."""
     try:
         out = run(["lsblk", "-J", "-b", "-o", "PATH,FSTYPE,SIZE,MOUNTPOINT"], capture_output=True, text=True).stdout
         devs = []
@@ -283,7 +293,8 @@ def mount_windows_ro(run=subprocess.run):
     for d in ntfs:
         if d.get("mountpoint"):
             return d["mountpoint"]
-        r = run(["udisksctl", "mount", "-b", d["path"], "-o", "ro"], capture_output=True, text=True)
+        argv = ["udisksctl", "mount", "-b", d["path"], "-o", "ro"] + ([] if interactive else ["--no-user-interaction"])
+        r = run(argv, capture_output=True, text=True)
         m = re.search(r" at (/\S+)", r.stdout or "")
         if m:
             return m.group(1).rstrip(".")
