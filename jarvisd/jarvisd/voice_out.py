@@ -13,7 +13,12 @@ def voice_url(name):
     lang, who, quality = name.split("-", 2)
     return f"{HF}/{lang.split('_')[0]}/{lang}/{who}/{quality}/{name}.onnx"
 
-def ensure_voice(name, folder=VOICES, fetch=urllib.request.urlretrieve):
+SYSTEM_VOICES = "/usr/lib/jarvis-os/voices"   # the default voice ships in the image, so JARVIS talks offline
+
+def ensure_voice(name, folder=VOICES, fetch=urllib.request.urlretrieve, system=SYSTEM_VOICES):
+    sp = os.path.join(system, name + ".onnx")
+    if os.path.exists(sp) and os.path.exists(sp + ".json"):
+        return sp
     path = os.path.join(folder, name + ".onnx")
     if os.path.exists(path) and os.path.exists(path + ".json"):
         return path

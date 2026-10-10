@@ -22,6 +22,19 @@ export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1
     "websocket-client>=1.6" "opencv-contrib-python-headless>=4.8,<5"
 # openWakeWord's tflite dependency has no wheels; jarvisd only uses its ONNX models
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python --no-deps "openwakeword==0.6.0"
+# Offline from the first boot: the speech-to-text model and JARVIS's voice ship in the image (~200 MB);
+# only the optional offline chat model (Ollama, a few GB) is downloaded later, into the person's home folder.
+HF_HOME=/tmp/hf /usr/lib/jarvis-os/venv/bin/python - <<'EOF'
+from faster_whisper import download_model
+p = download_model("base.en", output_dir="/usr/lib/jarvis-os/models/whisper/base.en")
+print("whisper base.en ->", p)
+EOF
+V=https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx
+mkdir -p /usr/lib/jarvis-os/voices
+curl -fsSL --retry 5 -o /usr/lib/jarvis-os/voices/en_GB-alan-medium.onnx "$V"
+curl -fsSL --retry 5 -o /usr/lib/jarvis-os/voices/en_GB-alan-medium.onnx.json "$V.json"
+test -s /usr/lib/jarvis-os/models/whisper/base.en/model.bin && test -s /usr/lib/jarvis-os/voices/en_GB-alan-medium.onnx
+rm -rf /tmp/hf /usr/lib/jarvis-os/models/whisper/base.en/.cache
 rm -rf /tmp/uvenv
 cp -a /ctx/jarvisd/jarvisd /usr/lib/jarvis-os/jarvisd
 install -Dm0755 /dev/stdin /usr/bin/jarvisctl <<'EOF'
@@ -30,7 +43,7 @@ cd /usr/lib/jarvis-os && exec /usr/lib/jarvis-os/venv/bin/python -m jarvisd "$@"
 EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
-systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service
+systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-ollama.service jarvis-ai-setup.service
 systemctl enable jarvis-grub-theme.service jarvis-boot-names.service
 
 # 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);

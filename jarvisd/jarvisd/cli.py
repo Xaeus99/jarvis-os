@@ -45,7 +45,20 @@ def main(argv=None):
     p = sub.add_parser("dnd-hold", help="hold Do Not Disturb until stopped (used by stream mode)"); p.add_argument("reason", nargs="?", default="Streaming")
     p = sub.add_parser("workspace", help="the workspace panel (Ctrl+Shift+J runs `jarvisctl workspace toggle`)")
     p.add_argument("what", nargs="?", default="toggle", choices=["toggle", "open", "close", "status"])
+    p = sub.add_parser("ai", help="the offline brain (local AI chat): setup downloads it, status, ask \"...\"")
+    p.add_argument("what", choices=["setup", "status", "ask"]); p.add_argument("text", nargs="?", default="")
+    p.add_argument("--first-boot", action="store_true")
+    p = sub.add_parser("tell", help="say something to the running JARVIS (as if spoken); it answers out loud")
+    p.add_argument("text")
+    sub.add_parser("listen", help="make the running JARVIS listen now (push-to-talk; bound to Ctrl+Shift+Space)")
     a = ap.parse_args(argv)
+    if a.cmd == "ai":
+        return ai_cmd(a)
+    if a.cmd in ("tell", "listen"):
+        from . import ipc
+        r = ipc.send("daemon", {"cmd": "say", "text": a.text} if a.cmd == "tell" else {"cmd": "listen"})
+        print(json.dumps(r if r is not None else {"ok": False, "error": "JARVIS's voice service isn't running (systemctl --user start jarvisd)"}))
+        return 0 if r and r.get("ok") else 1
     if a.cmd == "link":
         return link(a)
     if a.cmd == "workspace":
@@ -66,6 +79,29 @@ def main(argv=None):
     elif a.cmd == "status":
         print(json.dumps({"remote": b.remote.st}, indent=1))
     return 0
+
+def ai_cmd(a):
+    import os
+    from . import localai
+    cfg_path = os.path.expanduser("~/.config/jarvis/config.json")
+    try:
+        cfg = json.load(open(cfg_path))
+    except (OSError, ValueError):
+        cfg = {}
+    if a.what == "setup":
+        st = localai.setup(cfg)
+        print(json.dumps(st))
+        if st.get("status") in ("ready", "off") and a.first_boot:
+            done = os.path.join(os.path.dirname(localai.STATE), "localai.done")
+            open(done, "w").write(st.get("status") + "\n")
+        return 0 if st.get("status") in ("ready", "off") else 1
+    ai = localai.LocalAI(cfg)
+    if a.what == "status":
+        print(json.dumps({"ready": ai.ready(), "model": ai.model(), **localai.read_state()}))
+        return 0
+    ans = ai.ask(a.text or "Introduce yourself in one sentence.")
+    print("JARVIS:", ans if ans else "(the offline brain isn't ready: jarvisctl ai setup)")
+    return 0 if ans else 1
 
 def workspace_cmd(a):
     from . import workspace

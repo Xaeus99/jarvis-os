@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=J.A.R.V.I.S. Listen
+Comment=Make JARVIS listen now, without the wake word (push to talk)
+Exec=jarvisctl listen
+Icon=audio-input-microphone
+Categories=Utility;
+Keywords=jarvis;talk;listen;voice;
+StartupNotify=false
+NoDisplay=true
+# KDE registers this as a global shortcut; a Wayland app can't grab keys itself
+X-KDE-Shortcuts=Ctrl+Shift+Space

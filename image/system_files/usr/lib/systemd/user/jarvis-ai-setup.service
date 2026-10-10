@@ -1,0 +1,15 @@
+[Unit]
+Description=JARVIS OS: download the offline brain (local AI chat model) once per user
+After=graphical-session.target network-online.target
+ConditionPathExists=!%h/.local/state/jarvis/localai.done
+
+[Service]
+Type=oneshot
+# waits for the network; a stopped download resumes at the next login (or "Jarvis, download your offline brain")
+ExecStartPre=/usr/bin/sh -c 'for i in $(seq 60); do curl -fsI --max-time 5 https://github.com >/dev/null 2>&1 && exit 0; sleep 5; done; exit 0'
+ExecStart=/usr/bin/jarvisctl ai setup --first-boot
+TimeoutStartSec=4h
+Nice=10
+
+[Install]
+WantedBy=graphical-session.target

@@ -129,6 +129,15 @@ def open_mic(device=None, wait_s=30.0, make=None, sleep=time.sleep, probe=has_in
                 said = True
             sleep(wait_s)
 
+WHISPER_DIR = "/usr/lib/jarvis-os/models/whisper"
+
+def whisper_model(cfg, system=WHISPER_DIR):
+    """Speech-to-text model: the copy shipped in the image (works offline from the first boot), else the name
+    faster-whisper downloads itself."""
+    name = cfg.get("whisper_model", "base.en")
+    local = os.path.join(system, name)
+    return local if os.path.isfile(os.path.join(local, "model.bin")) else name
+
 def wire_tab(cfg, brain, speak, state_dir, listener_cls=None, send_result=None):
     """Connect the brain to Tab: forward unknown phrases, speak Tab's replies, run Tab's (safe) actions and send the
     sealed results back. Returns (forwarder, listener); both None when this PC isn't linked yet."""
@@ -209,7 +218,7 @@ def main():
         log.info("workspace link unavailable: %r", e)
     mic = open_mic(cfg.get("mic_device"))
     from faster_whisper import WhisperModel
-    whisper = WhisperModel(cfg.get("whisper_model", "base.en"), device="cpu", compute_type="int8")
+    whisper = WhisperModel(whisper_model(cfg), device="cpu", compute_type="int8")
     models = os.environ.get("JARVIS_MODELS", "/usr/lib/jarvis-os/models")
     wake = Wake(models, cfg.get("assistant", {}), whisper)
     def stt(audio):

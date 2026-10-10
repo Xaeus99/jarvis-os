@@ -67,10 +67,33 @@ def parse_os(low):
         return "gpu_stats", {}
     if F(r"what(?:'s| is| has) new(?: (?:in|with) (?:jarvis(?: os)?|you|the system|this update))?|(?:show (?:me )?)?what'?s new|what changed(?: in the update)?", t):
         return "whats_new", {}
+    if F(r"(?:please )?(?:download|install|set up|setup|get|fetch) (?:your |the |my |an? )?(?:offline|local) (?:brain|ai|mode|model)", t):
+        return "ai_setup", {}
+    if F(r"(?:is )?(?:your |the )?(?:offline|local) (?:brain|ai)(?: status| ready| done)?\??|(?:how(?:'s| is) )?(?:the )?(?:offline|local) (?:brain|ai) (?:download )?(?:going|coming along)", t):
+        return "ai_status", {}
+    if F(r"(?:forget|clear|reset) (?:our|this|the) (?:conversation|chat)|(?:let'?s )?start (?:a )?(?:new conversation|over)|new (?:conversation|chat)", t):
+        return "ai_forget", {}
+    if F(r"(?:link|connect) (?:yourself |jarvis )?(?:to|with) tab|how do i (?:link|connect) (?:you )?(?:to|with) tab", t):
+        return "tab_link_help", {}
     m = F(r"(?:switch|change|go|cut|flip)(?: over)? (?:the )?(?:obs )?(?:scene )?to (?:the |my )?(.+?) scene", t) or \
         F(r"(?:switch|change|set) (?:the )?(?:obs )?scene to (?:the |my )?(.+)", t) or F(r"(?:obs )?scene (.+)", t)
     if m:
         return "obs_scene", {"name": m.group(1)}
+    return None
+
+# Phrases that need Tab (the internet, his accounts, other people) rather than the offline brain
+TAB_TASK = re.compile(r"\btab\b|\be-?mails?\b|\binbox\b|\bcalendar\b|\btext (?!me\b)\w+|\bsend (?:a |an )?(?:message|text)|"
+                      r"\border (?:me |a |some )|\bbuy\b|\bbook (?:a |me )|\breservation\b|\blook (?:it |that |this )?up\b|"
+                      r"\bsearch (?:for|the web|online)\b|\bgoogle\b|\bnews\b|\blatest\b|\bscores?\b|\bprice of\b|\bstock\b|"
+                      r"\btoday'?s\b|\bright now\b|\bon my phone\b", re.I)
+
+def route(text, linked, ai_ready):
+    """Where a phrase the built-in commands don't know goes: 'tab', 'ai' or None (nothing can answer it).
+    The offline brain answers chat and questions; Tab, when linked, takes tasks that need the internet or his accounts."""
+    if linked and (TAB_TASK.search(text or "") or not ai_ready):
+        return "tab"
+    if ai_ready:
+        return "ai"
     return None
 
 class LinuxBrain:
@@ -83,7 +106,9 @@ class LinuxBrain:
         self.run = run or Runner()
         self._say = say or (lambda text: None)
         self.ask = ask
-        self.forward = forward               # callable(text) -> sends to Tab; None = local-only
+        self.forward = forward               # callable(text) -> sends to Tab; None = not linked
+        from .localai import LocalAI
+        self.ai = LocalAI(self.cfg)          # the offline brain (Ollama); answers what the commands don't
         self.spoken = []
         self.hands = LinuxHands(self.cfg, self.state_dir, run=self.run)
         self.qol = qol.QoL(self, hands=self.hands, state_dir=self.state_dir, start_clock=False)
@@ -201,10 +226,32 @@ class LinuxBrain:
         it = qol.parse(low)
         if it is not None:
             return self.qol.handle(it, self.ask)
-        if self.forward:
-            self.forward(text)
-            return self.say(f"Passing that to Tab, {self.sir}.")
-        return self.say(f"I can't do that one offline, {self.sir}. Say \u201cwhat can you do\u201d for my local commands.")
+        return self.fallback(text)
+
+    def fallback(self, raw):
+        """Anything the built-in commands don't know: the offline brain, or Tab when linked (see route())."""
+        s = self.sir
+        try:
+            ready = self.ai.ready()
+        except Exception:
+            ready = False
+        where = route(raw, bool(self.forward), ready)
+        if where == "ai":
+            ans = self.ai.ask(raw, sir=s)
+            if ans:
+                return self.say(ans)
+            where = "tab" if self.forward else None
+        if where == "tab":
+            self.forward(raw)
+            return self.say(f"Passing that to Tab, {s}.")
+        from . import localai
+        st = localai.read_state().get("status")
+        if st == "installing":
+            return self.say(localai.status_line(sir=s) + " Until then I can do my built-in commands.")
+        if self.ai.enabled:
+            return self.say(f"I can't answer that one yet, {s}. Say \u201cdownload your offline brain\u201d and I'll learn to chat "
+                            f"without the internet, or \u201cwhat can you do\u201d for my built-in commands.")
+        return self.say(f"I can't do that one offline, {s}. Say \u201cwhat can you do\u201d for my local commands.")
 
     def _confirm(self, question):
         ans = self.ask(question) if self.ask else ""
@@ -263,6 +310,34 @@ class LinuxBrain:
             code, out = self.run(argv)
             what = "off" if x.get("off") else x.get("color") or f"the {x.get('profile')} profile"
             return self.say(f"Lights set to {what}, {s}." if code == 0 else f"OpenRGB didn't answer, {s}. Is it running?")
+        if action == "ai_setup":
+            from . import localai
+            if self.ai.ready():
+                return self.say(f"My offline brain is already here, {s}: {self.ai.model()}.")
+            if localai.read_state().get("status") == "installing" and getattr(self, "_ai_thread", None) and self._ai_thread.is_alive():
+                return self.say(localai.status_line(sir=s))
+            if not self.ai.enabled:
+                return self.say(f"My offline brain is switched off in my settings, {s}.")
+            import threading
+            self._ai_thread = threading.Thread(target=localai.setup, args=(self.cfg,), kwargs={"say": self.say},
+                                               name="ai-setup", daemon=True)
+            if isinstance(self.run, Runner):
+                self._ai_thread.start()
+            return self.say(f"Downloading my offline brain, {s}. It's a few gigabytes, so give me a few minutes; "
+                            f"I'll tell you when it's ready.")
+        if action == "ai_status":
+            from . import localai
+            if self.ai.ready():
+                return self.say(f"My offline brain is ready, {s}: {self.ai.model()}.")
+            return self.say(localai.status_line(sir=s))
+        if action == "ai_forget":
+            self.ai.forget()
+            return self.say(f"Fresh start, {s}.")
+        if action == "tab_link_help":
+            if self.forward:
+                return self.say(f"I'm already linked to Tab, {s}.")
+            return self.say(f"I work without Tab, {s}, but linking adds the bigger jobs. Text Tab \u201clink code for JARVIS OS\u201d, "
+                            f"then open the JARVIS menu in the tray and choose Link to Tab.")
         if action == "whats_new":
             from . import whatsnew
             try:
@@ -398,10 +473,7 @@ def _execute_intent(self, it):
         return self.say(f"Very well, {s}.") if k == "cancel" else ""
     if k == "clarify":
         return self.say(str(it.arg or f"Could you say that again, {s}?"))
-    if self.forward:
-        self.forward(it.raw or str(it.arg))
-        return self.say(f"Passing that to Tab, {s}.")
-    return self.say(f"I can't do that one offline, {s}. Say \u201cwhat can you do\u201d for my local commands.")
+    return self.fallback(it.raw or str(it.arg))
 
 def _handle(self, text):
     low = commands.normalize(text)
