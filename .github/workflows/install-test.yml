@@ -4,7 +4,7 @@
 name: install-test
 on:
   workflow_dispatch: { inputs: { tag: { default: "beta" } } }
-  push: { branches: [main], paths: [".github/workflows/install-test.yml", "tools/install_test.sh", "image/disk_config/install-test.toml"] }
+  push: { branches: [main], paths: [".github/workflows/install-test.yml", "tools/install_test.sh", "image/disk_config/install-test.toml", "image/build_files/fix_repos.py"] }
 permissions: { contents: read, packages: read }
 jobs:
   install:
@@ -24,10 +24,14 @@ jobs:
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag || 'beta' }}"
           mkdir -p output
           sudo podman pull "$IMAGE"
+          # images built before the repo fix still carry a repo with a missing GPG key; apply the same fix here
+          printf 'FROM %s\nCOPY fix_repos.py /tmp/fix_repos.py\nRUN python3 /tmp/fix_repos.py && rm /tmp/fix_repos.py\n' "$IMAGE" > /tmp/Containerfile.iso
+          sudo podman build -t localhost/jarvis-os-installtest:latest -f /tmp/Containerfile.iso image/build_files
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ./image/disk_config/install-test.toml:/config.toml:ro -v ./output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True "$IMAGE"
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
+            localhost/jarvis-os-installtest:latest
           sudo chown -R "$USER" output; ls -la output/bootiso
           sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h /
       - name: Dummy Windows disk

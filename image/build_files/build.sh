@@ -60,3 +60,7 @@ docker:
     use-sigstore-attachments: true
 EOF
 echo "IMAGE_REPO=${IMAGE_REPO}" >> /usr/lib/jarvis-os/version
+
+# 7. Repo hygiene: a repo whose GPG key file is missing breaks the installer build (bootc-image-builder
+#    depsolves Anaconda from these repos); disable such repos. Updates come as whole signed images anyway.
+python3 /ctx/fix_repos.py
