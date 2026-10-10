@@ -70,3 +70,12 @@ for t in /usr/share/sddm/themes/*/; do
   [ -f "${t}theme.conf" ] || continue
   printf '[General]\nbackground=/usr/share/wallpapers/JARVIS/contents/images/2560x1440.png\ntype=image\n' > "${t}theme.conf.user"
 done
+
+# 9. First login is JARVIS OS, not Bazzite: the base's welcome app (Bazzite Portal / yafti) no longer autostarts.
+#    It stays installed and can still be opened from the app menu.
+for f in /etc/xdg/autostart/*.desktop /usr/etc/xdg/autostart/*.desktop; do
+  [ -f "$f" ] || continue
+  if grep -qiE '^(Name|Exec)=.*(bazzite.?portal|yafti)' "$f"; then
+    echo "welcome app autostart off: $f"; sed -i '/^Hidden=/d' "$f"; echo 'Hidden=true' >> "$f"
+  fi
+done
