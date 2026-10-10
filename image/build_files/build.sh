@@ -68,7 +68,10 @@ python3 /ctx/fix_repos.py
 # 8. Login screen: the JARVIS wallpaper behind whichever SDDM theme the base ships
 for t in /usr/share/sddm/themes/*/; do
   [ -f "${t}theme.conf" ] || continue
+  ls -l "${t}theme.conf.user" 2>/dev/null || :   # Fedora links this into /var, which an image can't ship: replace the link
+  rm -f "${t}theme.conf.user"
   printf '[General]\nbackground=/usr/share/wallpapers/JARVIS/contents/images/2560x1440.png\ntype=image\n' > "${t}theme.conf.user"
+  echo "login screen wallpaper: ${t}theme.conf.user"
 done
 
 # 9. First login is JARVIS OS, not Bazzite: the base's welcome app (Bazzite Portal / yafti) no longer autostarts.
