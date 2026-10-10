@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <action id="os.jarvis.windows-ro-unlock">
+    <description>Read the BitLocker-encrypted Windows drive (read-only)</description>
+    <message>J.A.R.V.I.S. wants to open the Windows drive read-only with its recovery key, to copy the Tab link</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/jarvis-os/windows-ro-unlock</annotate>
+  </action>
+</policyconfig>

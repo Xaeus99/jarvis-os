@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Open a BitLocker-encrypted Windows partition READ-ONLY with its 48-digit recovery key, so JARVIS OS can copy
+# the Tab link from Windows JARVIS's settings. Run as root through pkexec (polkit action os.jarvis.windows-ro-unlock).
+#   windows-ro-unlock open /dev/nvme0n1p3   (recovery key on stdin; prints the mount point)
+#   windows-ro-unlock close
+# Read-only all the way down: the dm-crypt mapping is opened --readonly and the filesystem mounted ro, so neither
+# BitLocker's metadata nor any Windows file can be changed. The key is read from stdin, handed to cryptsetup on its
+# stdin, and never written anywhere.
+set -euo pipefail
+NAME=jarvis-windows-ro
+MNT=/run/jarvis/windows-ro
+case "${1:-}" in
+  open)
+    dev="${2:-}"
+    [ -b "$dev" ] || { echo "not a block device: $dev" >&2; exit 2; }
+    [ "$(blkid -o value -s TYPE "$dev" 2>/dev/null)" = "BitLocker" ] || { echo "$dev is not BitLocker" >&2; exit 2; }
+    IFS= read -r key || :
+    key="$(printf '%s' "$key" | tr -d ' \r')"
+    [[ "$key" =~ ^[0-9]{6}(-[0-9]{6}){7}$ ]] || { echo "that is not a 48-digit recovery key (8 groups of 6 digits)" >&2; exit 3; }
+    [ -e "/dev/mapper/$NAME" ] || printf '%s' "$key" | cryptsetup open --type bitlk --readonly --key-file=- "$dev" "$NAME"
+    unset key
+    mkdir -p "$MNT"
+    mountpoint -q "$MNT" || mount -o ro,nosuid,nodev,noexec "/dev/mapper/$NAME" "$MNT"
+    echo "$MNT" ;;
+  close)
+    if mountpoint -q "$MNT"; then umount "$MNT"; fi
+    if [ -e "/dev/mapper/$NAME" ]; then cryptsetup close "$NAME"; fi
+    echo closed ;;
+  *) echo "usage: $0 open DEVICE | close" >&2; exit 2 ;;
+esac

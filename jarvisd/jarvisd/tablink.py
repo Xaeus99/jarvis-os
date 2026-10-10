@@ -244,7 +244,10 @@ LINK_KEYS = {"forwarding": ("to", "smtp_hosts", "relay_url", "relay_referer", "s
 
 def import_link(win_cfg_path, linux_cfg_path):
     """Copy only the Tab link settings into the Linux config (everything else in the Linux config is kept)."""
-    src = json.load(open(win_cfg_path, encoding="utf-8-sig"))
+    return merge_link(json.load(open(win_cfg_path, encoding="utf-8-sig")), linux_cfg_path)
+
+def merge_link(src, linux_cfg_path):
+    """Merge the Tab link settings from a Windows-JARVIS-shaped dict (a config.json, or a link-code bundle)."""
     cfg = {}
     if os.path.exists(linux_cfg_path):
         cfg = json.load(open(linux_cfg_path, encoding="utf-8"))
@@ -299,3 +302,41 @@ def mount_windows_ro(run=subprocess.run, interactive=True):
         if m:
             return m.group(1).rstrip(".")
     return None
+
+
+# ---------------------------------------------------------------- BitLocker: read Windows with the recovery key
+UNLOCK = "/usr/libexec/jarvis-os/windows-ro-unlock"
+_RKEY = re.compile(r"^\d{6}(-\d{6}){7}$")
+
+def normalize_recovery_key(text):
+    """'123456 123456 ...' / '123456-...' -> '123456-123456-...' or None. BitLocker recovery keys are 8 groups of 6 digits."""
+    digits = re.sub(r"\D", "", text or "")
+    if len(digits) != 48:
+        return None
+    key = "-".join(digits[i:i + 6] for i in range(0, 48, 6))
+    return key if _RKEY.match(key) else None
+
+def bitlocker_partitions(run=subprocess.run):
+    """BitLocker partitions, biggest first (the biggest is C:)."""
+    try:
+        out = run(["lsblk", "-J", "-b", "-o", "PATH,FSTYPE,SIZE"], capture_output=True, text=True).stdout
+        devs = []
+        for top in json.loads(out).get("blockdevices", []):
+            devs.append(top); devs.extend(top.get("children") or [])
+    except Exception:
+        return []
+    return [d["path"] for d in sorted((d for d in devs if (d.get("fstype") or "").lower() == "bitlocker"),
+                                      key=lambda d: -int(d.get("size") or 0))]
+
+def unlock_windows_ro(dev, key, run=subprocess.run):
+    """Open the BitLocker partition read-only (pkexec asks for this PC's password). Mount point or None.
+    The key goes to the root helper on stdin only; it is never stored or logged."""
+    r = run(["pkexec", UNLOCK, "open", dev], input=key + "\n", capture_output=True, text=True)
+    if r.returncode != 0:
+        log.warning("BitLocker unlock failed: %s", (r.stderr or "").strip()[-200:])
+        return None
+    lines = (r.stdout or "").strip().splitlines()
+    return lines[-1] if lines else None
+
+def lock_windows(run=subprocess.run):
+    run(["pkexec", UNLOCK, "close"], capture_output=True, text=True)

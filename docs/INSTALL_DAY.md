@@ -10,8 +10,11 @@ Plan about **2 hours**. Nothing here deletes Windows. The only thing that gets e
 - [ ] **A backup.** Best: a full *system image* on an external drive (Control Panel > Backup and Restore (Windows 7) >
       Create a system image). Free option: copy what you'd hate to lose (school files, clips, screenshots, game saves that
       aren't in the cloud) to your cloud storage. Steam games re-download for free.
-- [ ] **Your Windows recovery key**, if the drive is encrypted: [aka.ms/myrecoverykey](https://aka.ms/myrecoverykey).
-      Write it on paper or take a photo with your phone. Changing boot settings can make Windows ask for it once.
+- [ ] **Is Windows encrypted (BitLocker / Device encryption)?** Check: Settings > Privacy & security > *Device
+      encryption*, or in Terminal (Admin) `manage-bde -status C:`. Most new PCs with Windows 11 are.
+- [ ] **If it is: get your recovery key** at [aka.ms/myrecoverykey](https://aka.ms/myrecoverykey) (48 digits, 8 groups
+      of 6). Write it on paper or take a photo with your phone. You need it if Windows asks after the boot settings
+      change, and it's one of the two ways JARVIS OS can link to Tab (below). **Don't turn BitLocker off** for this.
 
 ## Day of, in Windows (about 30 minutes)
 - [ ] Install pending Windows updates and restart.
@@ -40,9 +43,28 @@ Plan about **2 hours**. Nothing here deletes Windows. The only thing that gets e
       (enter the recovery key if it asks).
 - [ ] Boot JARVIS OS, log in, connect to Wi-Fi. JARVIS installs the app list in the background and links itself to
       the same Tab as Windows JARVIS (`jarvisctl link --from-windows`, read-only).
+      **If Windows is BitLocker-encrypted**, Linux can't read it on its own, so the automatic link says so and waits.
+      Link it one of two ways (see *Linking to Tab when Windows is encrypted* below).
 - [ ] Say **"Jarvis, restore my games"** to queue your Linux-compatible Steam games.
+
+## Linking to Tab when Windows is encrypted (BitLocker)
+Windows JARVIS keeps its Tab link (mailbox, reply channel and key) in its settings on C:. When C: is BitLocker-encrypted,
+Linux sees only scrambled data. Two ways to link, both read-only for Windows:
+
+1. **With the recovery key** (on the PC, 1 minute). Open Konsole and run
+   `jarvisctl link --from-windows --bitlocker`. Type the 48-digit recovery key when asked, then your JARVIS OS password
+   (the admin prompt). JARVIS opens C: **read-only**, copies only the Tab link, and closes it again. The key is used once
+   and never saved. Nothing on Windows changes, and BitLocker stays on.
+2. **With a link code from Tab** (no key needed, works even if Windows is gone). Text Tab "link code for JARVIS OS".
+   Tab answers with a one-time code like `7KQ2-M9XD-R4TB`, good for one hour. Run
+   `jarvisctl link --code 7KQ2-M9XD-R4TB`. The code itself never goes over the internet; it unlocks a sealed copy of
+   the link settings that Tab posts for one hour.
+
+Check it worked: say "Jarvis, ask Tab what time it is". If you hear an answer, you're linked.
 
 ## If something goes wrong
 - Windows is always one boot-menu key away: tap the boot-menu key and pick **Windows Boot Manager**.
-- A bad JARVIS OS update: pick the previous version in the boot menu, or run `sudo bootc rollback`.
+- A bad JARVIS OS update: pick **JARVIS OS … - previous (rollback)** in the boot menu, or run `sudo bootc rollback`.
+- The firmware's own boot list (F11/F12) shows **JARVIS OS** and **Windows Boot Manager**. Right after installing it
+  may say *Bazzite* for one boot; JARVIS OS renames it on its first start.
 - Windows asks for a recovery key: it's the one you saved from aka.ms/myrecoverykey.
