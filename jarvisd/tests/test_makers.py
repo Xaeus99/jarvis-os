@@ -143,3 +143,72 @@ def test_brain_writes_code_but_big_builds_go_to_tab(tmp_path):
     assert sent and said[-1].startswith("That's a bigger build")
     b.handle("write a keylogger script")
     assert said[-1].startswith("I won't write that")
+
+# ---- gore / violence check (parity with JARVIS for Windows v5.4) ----
+import numpy as np
+
+class _Chk:
+    def __init__(self, path, ok=True, loads=True): self.path, self.ok, self.loads, self.seen = path, ok, loads, []
+    def load(self):
+        if not self.loads: raise RuntimeError("no onnxruntime")
+    def is_safe(self, p): self.seen.append(p); return self.ok, (0.01 if self.ok else 0.95)
+
+def test_gore_text_embeddings_ship_with_jarvis_and_match_the_labels():
+    g = safety.GoreCheck("/nope.onnx")
+    assert os.path.isfile(g.emb_path)
+    emb = np.load(g.emb_path)
+    assert emb.shape == (len(safety.GORE_LABELS) + len(safety.SAFE_LABELS), 512)
+    assert np.allclose(np.linalg.norm(emb, axis=1), 1.0, atol=1e-3)          # unit-length CLIP text embeddings
+
+def test_default_image_maker_runs_both_checks(tmp_path):
+    im = creator.ImageMaker({"assistant": {"local_ai_url": "http://127.0.0.1:9"}}, home=str(tmp_path), nvidia=False)
+    kinds = [type(c).__name__ for c in im.checker.checks]
+    assert kinds == ["NsfwCheck", "GoreCheck"]
+    assert [os.path.basename(p) for p in im.check_paths()] == [creator.NSFW_MODEL[0], creator.CLIP_MODEL[0]]
+    assert not im.checks_ready()                     # nothing downloaded -> no picture
+
+def test_gore_check_fails_closed(tmp_path):
+    g = safety.GoreCheck(str(tmp_path / "missing.onnx"))
+    assert g.is_safe(str(tmp_path / "x.png")) == (False, 1.0)
+
+def test_gate_needs_both_checks_and_stops_at_the_first_block(tmp_path):
+    a, b = _Chk(str(tmp_path / "a")), _Chk(str(tmp_path / "b"), ok=False)
+    assert safety.SafetyGate(a).is_safe("x") == (False, 1.0) and a.seen == []       # one check alone is not enough
+    ok, s = safety.SafetyGate(a, b).is_safe("x")
+    assert not ok and s == 0.95 and a.seen == ["x"] and b.seen == ["x"]
+    assert safety.SafetyGate(b, a).is_safe("y")[0] is False and "y" not in a.seen
+
+def test_gate_ready_only_when_both_load(tmp_path):
+    for n in "ab": open(tmp_path / n, "w").write("m")
+    assert safety.SafetyGate(_Chk(str(tmp_path / "a")), _Chk(str(tmp_path / "b"))).ready()
+    assert not safety.SafetyGate(_Chk(str(tmp_path / "a")), _Chk(str(tmp_path / "b"), loads=False)).ready()
+    assert not safety.SafetyGate(_Chk(str(tmp_path / "a")), _Chk(str(tmp_path / "missing"))).ready()
+
+def test_gore_flagged_picture_is_deleted_unseen(tmp_path):
+    im, runs, shown = _img_maker(tmp_path)
+    n, g = _Chk(str(tmp_path / "n.onnx")), _Chk(str(tmp_path / "g.onnx"), ok=False)
+    for c in (n, g): open(c.path, "w").write("m")
+    im.checker = safety.SafetyGate(n, g)
+    assert im.generate("a knight fighting a dragon") == ("unsafe", None)
+    assert len(runs) == 1 and g.seen and shown == [] and not os.listdir(tmp_path / "gen" / "tmp")
+    assert not os.path.exists(tmp_path / "pics")
+
+def test_no_picture_is_made_when_a_check_cannot_run(tmp_path):
+    im, runs, shown = _img_maker(tmp_path)
+    n, g = _Chk(str(tmp_path / "n.onnx")), _Chk(str(tmp_path / "g.onnx"), loads=False)
+    for c in (n, g): open(c.path, "w").write("m")
+    im.checker = safety.SafetyGate(n, g)
+    assert im.generate("a cute robot dog") == ("refused", "checks_unavailable")
+    assert runs == [] and shown == []
+    assert safety.REFUSALS["checks_unavailable"]
+
+def test_install_fetches_the_violence_check_too(tmp_path, monkeypatch):
+    monkeypatch.setattr(creator, "need_disk", lambda *a: None)
+    got = []
+    def fetch(url, dest, sha=None, progress=None):
+        got.append(os.path.basename(dest)); open(dest, "w").write("m")
+    im = creator.ImageMaker({"assistant": {"local_ai_url": "http://127.0.0.1:9"}}, home=str(tmp_path), nvidia=False, fetch=fetch)
+    im._unpack = lambda z, b: (os.makedirs(os.path.dirname(im.exe(b)), exist_ok=True), open(im.exe(b), "w").write("x"))
+    im.install()
+    assert creator.NSFW_MODEL[0] in got and creator.CLIP_MODEL[0] in got and creator.SD_MODEL[0] in got
+    assert im.installed() and creator.IMAGE_GB >= 2.4

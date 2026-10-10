@@ -5,8 +5,9 @@
 - ImageMaker: "Jarvis, make an image of ..." -> stable-diffusion.cpp + SD-Turbo, 512x512. On an NVIDIA card it uses the
   Vulkan build (the NVIDIA driver's Vulkan, no CUDA install); without one, the CPU build (slow, a minute or two).
   The chat models are unloaded first so the image model fits in graphics memory, and it refuses while a game runs.
-  Strict safety (he's a minor): prompt check + negative prompt + an NSFW classifier on every result; a blocked image is
-  deleted and never shown or saved. Results go to ~/Pictures/JARVIS Images/.
+  Strict safety: prompt check + negative prompt + two on-device picture checks on every result (an NSFW classifier and
+  a CLIP gore/violence check); a blocked image is deleted and never shown or saved, and if either check can't run, no
+  image is made. Results go to ~/Pictures/JARVIS Images/.
 Everything downloads on first use into ~/.local/share/jarvis/imagegen (never baked into the OS image).
 """
 from __future__ import annotations
@@ -30,7 +31,11 @@ NSFW_MODEL = ("nsfw_vit_int8.onnx",
               "bdc941491cd09ae75c5f40b038a5cd64482fa4e2b5297747323c5cda31303920", 87.3)
 CODER = localai.CODER
 CODER_GB = 1.9
-IMAGE_GB = round((SD_BUILDS["vulkan"][2] + SD_MODEL[3] + NSFW_MODEL[3]) / 1000, 1)     # ~2.1
+# the gore / violence check (CLIP ViT-B/16 vision tower; its text side ships in jarvisd/models), same file as Windows v5.4
+CLIP_MODEL = ("clip_vit_b16_vision.onnx",
+              "https://huggingface.co/Xenova/clip-vit-base-patch16/resolve/342fdf2f67aded64d138ff074745fb4a5d2bba5f/onnx/vision_model.onnx",
+              "b5170b47c0ecc667c9af5b42ed460c341377706d1466d177798c65fe49ea1e6b", 345.1)
+IMAGE_GB = round((SD_BUILDS["vulkan"][2] + SD_MODEL[3] + NSFW_MODEL[3] + CLIP_MODEL[3]) / 1000, 1)     # ~2.5
 DATA = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "jarvis", "imagegen")
 
 # ---------------------------------------------------------------- folders + downloads
@@ -205,7 +210,10 @@ class ImageMaker:
         self.size = int(ic.get("size", 512))
         self.steps = int(ic.get("steps", 4))
         self.cfg_scale = float(ic.get("cfg_scale", 1.5))     # >1 so the strict negative prompt is applied
-        self.checker = checker or safety.NsfwCheck(os.path.join(self.home, NSFW_MODEL[0]), ic.get("nsfw_threshold", 0.2))
+        # two independent checks on every picture (sexual content, then gore/violence): both must pass or it's deleted unseen
+        self.checker = checker or safety.SafetyGate(
+            safety.NsfwCheck(os.path.join(self.home, NSFW_MODEL[0]), ic.get("nsfw_threshold", 0.2)),
+            safety.GoreCheck(os.path.join(self.home, CLIP_MODEL[0]), threshold=ic.get("gore_threshold", 0.7)))
         self.lock = threading.Lock()
         self.last = None
 
@@ -215,17 +223,35 @@ class ImageMaker:
     def model_path(self):
         return os.path.join(self.home, SD_MODEL[0])
 
+    def check_paths(self):
+        return self.checker.paths() if hasattr(self.checker, "paths") else [self.checker.path]
+
     def installed(self, build=None):
-        return os.path.isfile(self.exe(build)) and os.path.isfile(self.model_path()) and os.path.isfile(self.checker.path)
+        return (os.path.isfile(self.exe(build)) and os.path.isfile(self.model_path())
+                and all(os.path.isfile(p) for p in self.check_paths()))
+
+    def checks_ready(self):
+        """Asked BEFORE a picture is made: if the safety checks can't run, no picture is made."""
+        f = getattr(self.checker, "ready", None)
+        if f is None:
+            return os.path.isfile(getattr(self.checker, "path", "") or "")
+        try:
+            return bool(f())
+        except Exception as e:
+            log.warning("safety checks: %r", e)
+            return False
 
     def install(self, build=None, progress=lambda label, pct: None):
-        """First use: engine (~30 MB) + SD-Turbo (~2 GB) + the safety model (~87 MB). Resumable, checksum-checked."""
+        """First use: engine (~30 MB) + SD-Turbo (~2 GB) + the two safety models (~87 MB + ~345 MB). Resumable, checksum-checked."""
         build = build or self.build
         zipname, zsha, _ = SD_BUILDS[build]
-        need_disk(self.home, (0 if os.path.isfile(self.model_path()) else SD_MODEL[3] / 1000) + 0.2)
-        steps = [(NSFW_MODEL[1], self.checker.path, NSFW_MODEL[2], "safety check"),
-                 (SD_BASE + zipname, os.path.join(self.home, zipname), zsha, "image engine"),
-                 (SD_MODEL[1], self.model_path(), SD_MODEL[2], "image model")]
+        need_disk(self.home, (0 if os.path.isfile(self.model_path()) else SD_MODEL[3] / 1000) + 0.6)
+        paths = self.check_paths()
+        nsfw_path = next((p for p in paths if os.path.basename(p) == NSFW_MODEL[0]), paths[0])
+        steps = [(NSFW_MODEL[1], nsfw_path, NSFW_MODEL[2], "safety check")]
+        steps += [(CLIP_MODEL[1], p, CLIP_MODEL[2], "violence check") for p in paths if os.path.basename(p) == CLIP_MODEL[0]]
+        steps += [(SD_BASE + zipname, os.path.join(self.home, zipname), zsha, "image engine"),
+                  (SD_MODEL[1], self.model_path(), SD_MODEL[2], "image model")]
         for url, dest, sha, label in steps:
             if dest.endswith(".zip"):
                 if os.path.isfile(self.exe(build)):
@@ -273,11 +299,15 @@ class ImageMaker:
 
     def generate(self, prompt, seed=None, build=None):
         """Blocking. -> ("ok", path) | ("unsafe", None) | ("refused", kind) | ("failed", reason).
+        ("refused", "checks_unavailable") when either safety check can't run: then nothing is generated at all.
         An unsafe image is deleted before anyone sees it, and never saved."""
         ok, kind = safety.check_prompt(prompt)
         if not ok:
             return "refused", kind
         seed = seed if seed is not None else random.randint(1, 2 ** 31 - 1)
+        if not self.checks_ready():
+            log.warning("image refused: a safety check can't run")
+            return "refused", "checks_unavailable"
         tmpdir = os.path.join(self.home, "tmp"); os.makedirs(tmpdir, exist_ok=True)
         tmp = os.path.join(tmpdir, f"img_{int(time.time())}_{seed}.png")
         self.free_vram()

@@ -3,7 +3,9 @@
    of named real people. Refusals are short and in character.
 2) NEGATIVE / SAFE_SUFFIX: added to every image prompt.
 3) NsfwCheck: an image classifier (ViT, ONNX, runs on this PC) on every finished image. Anything scored as NSFW is
-   deleted before it is shown or saved. If the checker can't load, no image is made at all.
+   deleted before it is shown or saved.
+4) GoreCheck: a second, independent check for gore, blood, dead bodies and weapons pointed at people (CLIP zero-shot,
+   ONNX, CPU). SafetyGate runs both on every picture; if either check can't run, no image is made at all.
 Code creation has its own small refusal list (malware, password stealers...)."""
 from __future__ import annotations
 import codecs, logging, os, re
@@ -102,6 +104,8 @@ REFUSALS = {
                     "Real people are off the table for pictures, {sir}. A character of your own invention, though?"],
     "unsafe_output": ["That one came out wrong, {sir}, so I deleted it. Try a different description.",
                       "I binned that result, {sir}; it didn't pass my safety check. Another idea?"],
+    "checks_unavailable": ["My picture safety checks aren't working right now, {sir}, so I won't paint anything. Ask again in a bit.",
+                           "No picture this time, {sir}: my safety checks can't run, and I don't paint without them."],
 }
 
 NEGATIVE = ("nsfw, nude, naked, nudity, sexual, suggestive, erotic, cleavage, lingerie, underwear, bikini, swimsuit, "
@@ -169,3 +173,127 @@ class NsfwCheck:
         except Exception as e:
             log.warning("safety check failed (%r): treating as unsafe", e)
             return False, 1.0
+
+
+# ---------------------------------------------------------------- gore / violence check (CLIP zero-shot, shared with JARVIS for Windows v5.4)
+GORE_LABELS = ['a photo of blood and gore', 'a gory image with lots of blood', 'a bloody wound', 'a dead body', 'a corpse lying on the ground', 'a person being stabbed', 'a severed head', 'a decapitation', 'a gun pointed at a person', 'a person aiming a gun at someone', 'someone being shot', 'a violent murder', 'a graphic injury', 'a mutilated body', 'a massacre with dead people', 'a knife attack on a person', 'an execution', 'a person bleeding', 'a person covered in blood', 'a monster eating a person']
+SAFE_LABELS = ['a photo', 'a painting', 'a drawing of a cartoon character', 'a landscape', 'an animal', 'food', 'a car', 'a person smiling', 'a superhero in armor', 'a video game character', 'a toy', 'a building', 'red paint', 'a sunset', 'fireworks', 'a knight in armor', 'people playing sports', 'a robot', 'a fantasy scene', 'anime art', 'pixel art', 'a spaceship', 'a portrait of a person', 'a group of people', 'a toy water gun', 'a person playing paintball', 'a dragon', 'a castle', 'a computer wallpaper', 'a meal with tomato sauce', 'Iron Man', 'a superhero in a red and gold armored suit', 'a superhero shooting a laser beam into the sky', 'an action figure', 'strawberry jam', 'ketchup', 'a red drink', 'a doctor in a hospital', 'a cosplayer at a convention', 'a stormtrooper costume', 'red flowers', 'a dessert']
+
+
+class GoreCheck:
+    """v5.4: a second, independent picture check for gore, blood, dead bodies and weapons pointed at people.
+    CLIP (ViT-B/16 vision tower, ONNX, CPU) compares the picture with the descriptions above. The text side was
+    worked out ahead of time and ships with JARVIS (jarvisd/models/gore_text_emb.npy), so only the vision model is
+    downloaded. Fails closed: any error counts as unsafe.
+    Calibrated Oct 10, 2026 on 7 violent paintings (Goya, Caravaggio, Gentileschi, Rubens, David, Manet: all scored
+    0.93-1.0) and 27 everyday pictures (Iron Man, cosplay, Minecraft, jam, ketchup, fireworks, paintball: 0.003-0.55;
+    a boxing photo scored 0.96 and is blocked too). Threshold 0.7."""
+    MEAN = (0.48145466, 0.4578275, 0.40821073)
+    STD = (0.26862954, 0.26130258, 0.27577711)
+
+    def __init__(self, model_path, emb_path=None, threshold=0.7, label_threshold=0.6):
+        self.path = model_path
+        self.emb_path = emb_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "gore_text_emb.npy")
+        self.threshold, self.label_threshold = float(threshold), float(label_threshold)
+        self.sess = None
+        self.emb = None
+
+    def load(self):
+        if self.sess is None:
+            import numpy as np, onnxruntime as ort
+            emb = np.load(self.emb_path).astype("float32")
+            if emb.shape[0] != len(GORE_LABELS) + len(SAFE_LABELS):
+                raise ValueError("gore label table doesn't match")
+            self.emb = emb
+            self.sess = ort.InferenceSession(self.path, providers=["CPUExecutionProvider"])
+            self.inp = self.sess.get_inputs()[0].name
+            outs = [o.name for o in self.sess.get_outputs()]
+            self.out = outs.index("image_embeds") if "image_embeds" in outs else 0
+        return self.sess
+
+    @classmethod
+    def _prep(cls, img):
+        """BGR uint8 -> CLIP input: shortest side 224 (bicubic), centre crop 224, CLIP mean/std."""
+        import cv2, numpy as np
+        h, w = img.shape[:2]
+        s = 224.0 / min(h, w)
+        nh, nw = max(224, int(round(h * s))), max(224, int(round(w * s)))
+        r = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_CUBIC)
+        y0, x0 = (nh - 224) // 2, (nw - 224) // 2
+        r = r[y0:y0 + 224, x0:x0 + 224, ::-1].astype("float32") / 255.0
+        r = (r - np.array(cls.MEAN, dtype="float32")) / np.array(cls.STD, dtype="float32")
+        return np.transpose(r, (2, 0, 1))[None].astype("float32")
+
+    def scores(self, img):
+        """-> (p_unsafe, top_unsafe_prob, top_label) for one BGR image."""
+        import numpy as np
+        e = self.sess.run(None, {self.inp: self._prep(img)})[self.out][0]
+        e = e / (np.linalg.norm(e) + 1e-8)
+        logits = 100.0 * (self.emb @ e)
+        p = np.exp(logits - logits.max()); p = p / p.sum()
+        n = len(GORE_LABELS)
+        k = int(np.argmax(p[:n]))
+        return float(p[:n].sum()), float(p[k]), GORE_LABELS[k]
+
+    def score(self, image_path):
+        import cv2, numpy as np
+        self.load()
+        img = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError("unreadable image")
+        h, w = img.shape[:2]
+        # whole picture (squashed square, so the edges count too), centre, and both halves
+        crops = [cv2.resize(img, (max(h, w), max(h, w))), img, img[:, : w // 2 + w // 4], img[:, w // 4:]]
+        best = (0.0, 0.0, "")
+        for c in crops:
+            s = self.scores(c)
+            if s[0] > best[0]:
+                best = s
+        return best
+
+    def is_safe(self, image_path):
+        try:
+            p, top, label = self.score(image_path)
+            log.info("gore score %.3f (top %.3f %s) for %s", p, top, label, os.path.basename(image_path))
+            return (p < self.threshold and top < self.label_threshold), p
+        except Exception as e:
+            log.warning("gore check failed (%r): treating as unsafe", e)
+            return False, 1.0
+
+
+class SafetyGate:
+    """v5.4: every picture passes BOTH checks (sexual content, then gore/violence) or it's deleted unseen.
+    ready() is asked BEFORE a picture is made: if either check can't run, no picture is made."""
+    def __init__(self, *checks):
+        self.checks = [c for c in checks if c is not None]
+        self.path = self.checks[0].path if self.checks else ""
+        self.last = {}
+
+    def paths(self):
+        return [c.path for c in self.checks]
+
+    def ready(self):
+        if len(self.checks) < 2:
+            return False
+        try:
+            for c in self.checks:
+                if not os.path.isfile(c.path):
+                    return False
+                c.load()
+            return True
+        except Exception as e:
+            log.warning("safety checks can't run: %r", e)
+            return False
+
+    def is_safe(self, image_path):
+        if len(self.checks) < 2:
+            return False, 1.0
+        self.last = {}
+        worst = 0.0
+        for c in self.checks:
+            ok, s = c.is_safe(image_path)
+            self.last[type(c).__name__] = s
+            worst = max(worst, s)
+            if not ok:
+                return False, s
+        return True, worst
