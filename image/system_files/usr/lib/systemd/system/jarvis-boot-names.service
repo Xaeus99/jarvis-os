@@ -1,0 +1,16 @@
+[Unit]
+Description=Name the boot entries JARVIS OS (firmware entry and boot menu)
+RequiresMountsFor=/boot
+After=local-fs.target
+# stop order is the reverse of start order: our ExecStop runs AFTER ostree has written an update's entries
+Before=ostree-finalize-staged.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/libexec/jarvis-os/efi-label
+ExecStart=-/usr/libexec/jarvis-os/boot-titles
+ExecStop=-/usr/libexec/jarvis-os/boot-titles
+
+[Install]
+WantedBy=multi-user.target
