@@ -89,10 +89,10 @@ cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests
 
 **The promise:** JARVIS OS never erases or changes Windows. You pick a system every time you turn the PC on.
 
-1. **Back up** anything you'd hate to lose, to the cloud or a USB drive.
+1. **Back up.** The best backup is a full *system image* on an external drive: Control Panel > Backup and Restore (Windows 7) > **Create a system image**. Also copy anything you'd hate to lose to the cloud.
 2. **Save your BitLocker recovery key** if Windows has one: [aka.ms/myrecoverykey](https://aka.ms/myrecoverykey).
 3. **Turn off Fast Startup** in Control Panel > Power Options > Choose what the power buttons do.
-4. **Make room**: right-click Start > **Disk Management**, right-click **C:** > **Shrink Volume**, and free up **at least 150 GB**. Leave the new space *unallocated*.
+4. **Make room**: right-click Start > **Disk Management**, right-click **C:** > **Shrink Volume**. **150 GB** for JARVIS OS is plenty, since games can live on either side. Make sure Windows still has **at least 100 GB free** afterwards. Leave the new space *unallocated*.
 5. **Make a USB stick** (8 GB or more) from the JARVIS OS ISO with [Fedora Media Writer](https://fedoraproject.org/workstation/download) or Rufus (use DD mode). This **erases the USB stick**, not your PC.
 6. **Boot from USB**: restart and tap the boot-menu key. On ASRock and MSI boards that's usually **F11**. Pick the USB.
 7. In the installer, choose **Installation destination > the unallocated space only**. **Never** pick "erase disk" or the Windows partitions.
