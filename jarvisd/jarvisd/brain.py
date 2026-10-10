@@ -12,7 +12,7 @@ log = logging.getLogger("jarvisd.brain")
 
 OS_DESTRUCTIVE = {"switch_windows", "reboot_bios", "rollback", "reboot_update"}
 # the shared v5.1 command kinds JARVIS OS runs locally (everything else the shared parser knows goes to Tab)
-LOCAL_KINDS = {"workspace_open", "workspace_close"}
+LOCAL_KINDS = {"workspace_open", "workspace_close", "stream_start", "stream_stop", "record_start", "record_stop", "clip"}
 
 def parse_os(low):
     """JARVIS OS-only phrases. Returns (action, extra) or None."""
@@ -62,6 +62,10 @@ def parse_os(low):
         return "apps_install", {}
     if F(r"(?:what(?:'s| is) )?(?:my |the )?gpu (?:temp|temperature|usage|load)|how hot is (?:my |the )?(?:gpu|graphics card)", t):
         return "gpu_stats", {}
+    m = F(r"(?:switch|change|go|cut|flip)(?: over)? (?:the )?(?:obs )?(?:scene )?to (?:the |my )?(.+?) scene", t) or \
+        F(r"(?:switch|change|set) (?:the )?(?:obs )?scene to (?:the |my )?(.+)", t) or F(r"(?:obs )?scene (.+)", t)
+    if m:
+        return "obs_scene", {"name": m.group(1)}
     return None
 
 class LinuxBrain:
@@ -82,6 +86,26 @@ class LinuxBrain:
         self.remote = RemoteControl(os.path.join(self.state_dir, "remote.json"),
                                     stop_injection=lambda: self.run(["systemctl", "--user", "stop", "ydotoold.service"]))
 
+    def launch(self, argv):
+        """Start an app and don't wait for it (a real Runner would kill it at its timeout); tests record the argv."""
+        if isinstance(self.run, Runner):
+            from .studio import detached
+            return detached(argv)
+        return self.run(argv)
+
+    @property
+    def studio(self):
+        if getattr(self, "_studio", None) is None:
+            from . import gaming
+            from .studio import Studio
+            self._studio = Studio(self.cfg, launch=self.launch, run=self.run,
+                                  set_mode=lambda kind, on: gaming.set_mode(self.run, kind, on, self.cfg.get("gaming", {})))
+        return self._studio
+
+    @studio.setter
+    def studio(self, v):
+        self._studio = v
+
     def panel(self, what):
         """Open / close / toggle the workspace panel process (single instance, see workspace.py)."""
         from . import workspace
@@ -100,6 +124,12 @@ class LinuxBrain:
             if opening:
                 return self.say(f"Workspace online, {s}.")
             return self.say(f"Workspace closed, {s}. I'm still listening.")
+        if k in ("stream_start", "record_start"):
+            return self.say(self.studio.start("record" if k == "record_start" else "stream", s))
+        if k in ("stream_stop", "record_stop"):
+            return self.say(self.studio.stop("record" if k == "record_stop" else "stream", s))
+        if k == "clip":
+            return self.say(self.studio.clip(s))
         return self.say(f"That one isn't available on Linux yet, {s}.")
 
     def say(self, text):
@@ -176,6 +206,8 @@ class LinuxBrain:
             code, out = self.run(argv)
             what = "off" if x.get("off") else x.get("color") or f"the {x.get('profile')} profile"
             return self.say(f"Lights set to {what}, {s}." if code == 0 else f"OpenRGB didn't answer, {s}. Is it running?")
+        if action == "obs_scene":
+            return self.say(self.studio.scene(x["name"], s))
         if action == "gpu_stats":
             code, out = self.run(["nvidia-smi", "--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total",
                                   "--format=csv,noheader,nounits"])
@@ -267,7 +299,7 @@ def _execute_intent(self, it):
         argv = APPS.get(name)
         if not argv:
             argv = ["gtk-launch", name]
-        code, out = self.run(argv)
+        code, out = self.launch(argv)
         return self.say(f"Opening {name}, {s}." if code == 0 else f"I couldn't find {name}, {s}.")
     if k == "close_app":
         return self.say(f"Closing apps by voice comes in the next build, {s}.")

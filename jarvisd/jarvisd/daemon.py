@@ -9,7 +9,7 @@ The loop is written against small interfaces so it runs in tests with arrays ins
   brain.handle(text) -> reply text
 """
 from __future__ import annotations
-import json, logging, os, sys, time
+import json, logging, os, sys, threading, time
 import numpy as np
 
 log = logging.getLogger("jarvisd")
@@ -142,6 +142,10 @@ def main():
     def speak(text):
         hud.speaking(text); voice.speak(text); hud.idle()
     brain = LinuxBrain(cfg, say=speak)
+    def warm_obs():                       # OBS already open at login: keep its replay buffer on for "clip that"
+        try: brain.studio.warm()
+        except Exception as e: log.info("OBS warm-up: %r", e)
+    threading.Thread(target=warm_obs, name="obs-warm", daemon=True).start()
     _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone
