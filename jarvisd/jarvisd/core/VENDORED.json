@@ -9,9 +9,14 @@
   "overlay.py": "10ab48bf49b0d644f04fe96b0d97a778341e8ab681654044d950b60206112cc3",
   "weather.py": "54427cf4d1a46e0d43fe2f42530abac3bbf4f4987419bf64e470130e7d3a661a",
   "obs.py": "7ee222c89ab7d48e8e1796b3847560151af9b504c96afa4eeacc58a8f8f4166c",
-  "camera.py": "e3df3b1899475cba200685bf8f5f7196b3eebd306c2b36c9e2acec3423a782d0"
+  "camera.py": "e3df3b1899475cba200685bf8f5f7196b3eebd306c2b36c9e2acec3423a782d0",
+  "hudart.py": "57dde9ba088ead05074d6b44cdabc23fec6d17904896a47c2bdfa53450f8ef10",
+  "workspace.py": "cda02c3b8b0fa70388d6421f861b63214d9e8610341c6c6321f1f4ce85fe0624",
+  "wsdata.py": "c4b5f5c5583c01b3d510e2bcdd7f2804b1c9788217185fa85971ead918642945"
  },
  "patched": {
-  "camera.py": "Linux patches on v5.1 camera.py (sha256 dcbb022ef5e0ee1769bb2ebc9afe3040a50f4cbe8a62df31c5a1c7a6e759bf4e): V4L2 capture, pauses for Linux webcam apps (OBS, Discord, ...), Linux add-on message, owner's name removed from the docstring"
+  "camera.py": "Linux patches on v5.1 camera.py (sha256 dcbb022ef5e0ee1769bb2ebc9afe3040a50f4cbe8a62df31c5a1c7a6e759bf4e): V4L2 capture, pauses for Linux webcam apps (OBS, Discord, ...), Linux add-on message, owner's name removed from the docstring",
+  "workspace.py": "Linux patches on v5.1 workspace.py (sha256 5ce01fa9b93cc7c6a654cd3c950cb3d3951eeca8758343ee92160f8667c32f92): generic quick-launch tiles (no game names), Linux add-tile hints and file filter, no Tab-screen zoom viewer on Linux",
+  "wsdata.py": "Linux rewrite of the platform parts of v5.1 wsdata.py (sha256 63c33a3d89a6e95ce8fc9f802c0cda80ef0a02528cbbc277f57fdb2d861beaae): GPU from nvidia-smi / amdgpu sysfs (was win32pdh), now-playing from MPRIS via playerctl (was WinRT), Linux clip folders, disk = home; Stats/recent_clips/thumbnails/Poller unchanged"
  }
 }

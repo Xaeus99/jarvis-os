@@ -50,6 +50,7 @@ class Daemon:
         self.max_commands = max_commands
         self.hud = hud or _NoHud()
         self.heard = []
+        self.force = threading.Event()        # the workspace's mic button: listen now, as if he'd said "Jarvis"
 
     def run(self):
         n = 0
@@ -58,6 +59,8 @@ class Daemon:
             if c is None:
                 return n
             fired, info = self.wake.score(c)
+            if not fired and self.force.is_set():
+                self.force.clear(); fired, info = True, {}
             if not fired:
                 continue
             self.chime(); self.hud.listening()
@@ -160,6 +163,25 @@ def main():
     _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone
+    lock = threading.Lock()                # typed commands from the workspace never overlap a spoken one
+    def typed(text):
+        with lock:
+            hud.thinking(text); brain.handle(text); hud.idle()
+    box = {}
+    def on_ipc(msg):
+        if msg.get("cmd") == "say" and (msg.get("text") or "").strip():
+            threading.Thread(target=typed, args=(msg["text"].strip(),), name="typed", daemon=True).start()
+            return {"ok": True}
+        if msg.get("cmd") == "listen":
+            if "daemon" in box:
+                box["daemon"].force.set(); return {"ok": True}
+            return {"ok": False, "error": "no microphone yet"}
+        return {"ok": False, "error": "unknown command"}
+    try:
+        from . import ipc
+        ipc.Server("daemon", on_ipc).start()
+    except Exception as e:
+        log.info("workspace link unavailable: %r", e)
     mic = open_mic(cfg.get("mic_device"))
     from faster_whisper import WhisperModel
     whisper = WhisperModel(cfg.get("whisper_model", "base.en"), device="cpu", compute_type="int8")
@@ -168,7 +190,8 @@ def main():
     def stt(audio):
         segs, _ = whisper.transcribe(audio.astype(np.float32) / 32768.0, language="en", beam_size=1)
         return " ".join(s.text for s in segs)
-    Daemon(mic, wake, stt, brain, hud=hud).run()
+    box["daemon"] = Daemon(mic, wake, stt, brain, hud=hud)
+    box["daemon"].run()
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -6,7 +6,7 @@ key itself) sends it "toggle"; if no panel is running yet it starts the unit and
 The voice daemon does the same for "Jarvis, open/close the workspace".
 """
 from __future__ import annotations
-import json, logging, os, subprocess, sys, threading, time
+import json, logging, os, re, subprocess, sys, threading, time
 
 from . import ipc
 
@@ -93,8 +93,75 @@ def make_gui_caller(QtCore):
     call.bridge = b                       # keep it alive
     return call
 
-def build_window(cfg, QtWidgets, QtCore):
-    """The workspace window. A plain placeholder until the full v4 workspace is ported."""
+STATE = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "jarvis")
+CFG_PATH = os.path.expanduser("~/.config/jarvis/config.json")
+APP_TARGETS = {   # quick-launch tile targets -> Linux commands (tiles can also hold URLs, steam:// links and paths)
+    "brave": ["flatpak", "run", "com.brave.Browser"], "chrome": ["flatpak", "run", "com.google.Chrome"],
+    "spotify": ["flatpak", "run", "com.spotify.Client"], "discord": ["flatpak", "run", "com.discordapp.Discord"],
+    "obs": ["flatpak", "run", "com.obsproject.Studio"], "steam": ["steam"], "files": ["dolphin"], "explorer": ["dolphin"],
+    "settings": ["systemsettings"], "terminal": ["konsole"],
+}
+
+def launch_argv(target):
+    """A tile's target -> argv (never a shell string)."""
+    t = (target or "").strip()
+    if not t:
+        return None
+    if t.endswith(".desktop"):
+        return ["gtk-launch", os.path.basename(t)[:-8]]
+    if re.match(r"^[a-z][a-z0-9+.-]*://", t, re.I):
+        return ["xdg-open", t]                          # URLs, steam://
+    if t.startswith("/") or t.startswith("~"):
+        p = os.path.expanduser(t)
+        return [p] if os.access(p, os.X_OK) and not os.path.isdir(p) else ["xdg-open", p]
+    return APP_TARGETS.get(t.lower()) or ["gtk-launch", t]
+
+def detached(argv):
+    from .studio import detached as d
+    return d(argv)
+
+def save_cfg(update, path=None):
+    """Read-modify-write the person's config (only the keys the panel owns)."""
+    path = path or CFG_PATH
+    try:
+        cfg = json.load(open(path))
+    except (OSError, ValueError):
+        cfg = {}
+    update(cfg)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=1)
+    os.replace(tmp, path)
+
+class HudMirror:
+    """Mirrors the voice daemon's hud.json into the panel: reactor state + the conversation log."""
+    def __init__(self, win, read):
+        self.win, self.read = win, read
+        self.last = {}
+
+    def tick(self):
+        st = self.read()
+        if not st:
+            return
+        w, last = self.win, self.last
+        if st.get("state") != last.get("state"):
+            w.set_state(st.get("state", "idle"))
+        try: w.set_level(float(st.get("level") or 0.0))
+        except Exception: pass
+        if last and st.get("heard_ts") != last.get("heard_ts") and st.get("heard"):
+            w.add_log("you", st["heard"])
+        if last and st.get("caption_ts") != last.get("caption_ts") and st.get("caption"):
+            w.add_log("jarvis", st["caption"])
+        self.last = dict(st)
+
+def build_window(cfg, QtWidgets, QtCore, real=True):
+    """The v4 workspace (core/workspace.py) wired to JARVIS OS; a plain placeholder if it can't load."""
+    if real:
+        try:
+            return _real_window(cfg, QtWidgets, QtCore)
+        except Exception as e:
+            log.exception("full workspace unavailable (%r); showing the basic panel", e)
     w = QtWidgets.QWidget()
     w.setWindowTitle("J.A.R.V.I.S. \u2014 Workspace")
     lay = QtWidgets.QVBoxLayout(w); lay.addWidget(QtWidgets.QLabel("J.A.R.V.I.S. workspace"))
@@ -102,6 +169,50 @@ def build_window(cfg, QtWidgets, QtCore):
     def _open():
         w.showNormal(); w.raise_(); w.activateWindow()
     w.open = _open
+    return w
+
+def _real_window(cfg, QtWidgets, QtCore):
+    import socket
+    from PySide6 import QtGui
+    from .core import workspace as W, theme as T, wsdata, audioout
+    from . import hud
+    hud.load_fonts(QtGui, T)
+    T.set_theme(cfg.get("theme", "vibranium"))
+    w = W.Workspace(cfg, data_dir=os.path.join(STATE, "workspace"), hostname=socket.gethostname().split(".")[0])
+
+    def command(text):
+        if ipc.send("daemon", {"cmd": "say", "text": text}) is None:
+            w.add_log("you", text)
+            w.add_log("system", "JARVIS's voice service isn't running, so I couldn't do that. (systemctl --user start jarvisd)")
+    w.on_command = command
+    w.on_talk = lambda: ipc.send("daemon", {"cmd": "listen"})
+    w.on_media = lambda a: detached(["playerctl", {"play_pause": "play-pause", "prev": "previous"}.get(a, a)])
+    w.on_launch = lambda e: detached(launch_argv(e.get("target")) or ["true"])
+    w.on_open = lambda p: detached(["xdg-open", p])
+    def open_folder():
+        fs = wsdata.clip_folders()
+        if fs:
+            detached(["xdg-open", fs[0]])
+    w.on_open_folder = open_folder
+    def theme(name):
+        T.set_theme(name)
+        save_cfg(lambda c: c.__setitem__("theme", name))
+    w.on_theme = theme
+    w.on_sounds = lambda on: save_cfg(lambda c: c.setdefault("workspace", {}).__setitem__("sounds", bool(on)))
+    w.on_launch_changed = lambda tiles: save_cfg(lambda c: c.setdefault("workspace", {}).__setitem__("quick_launch", tiles))
+    w.audio_devices = audioout.devices
+    def audio(name):
+        sink = None if audioout.is_default(name) else audioout.sink_for(name)
+        if sink:
+            detached(["pactl", "set-default-sink", sink])
+    w.on_audio = audio
+    def weather_fn():
+        from .core import weather
+        return weather.panel_data(cfg.get("briefing") or {})
+    w.start_data(weather_fn=weather_fn, clip_folders_fn=wsdata.clip_folders, thumbs_dir=os.path.join(STATE, "workspace", "thumbs"))
+    mirror = HudMirror(w, hud.read_state)
+    t = QtCore.QTimer(w); t.timeout.connect(mirror.tick); t.start(150)
+    w._mirror = mirror
     return w
 
 def load_cfg():
