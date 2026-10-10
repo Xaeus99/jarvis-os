@@ -33,7 +33,10 @@ ser ""; ser "jarvis" 3; ser "jarvis-boot-test" 2; wait_shell
 ser 'export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus' 1
 # keep the desktop awake for the screenshots (a test VM sits idle long enough for the lock screen)
 ser 'kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false; kwriteconfig6 --file kscreenlockerrc --group Daemon --key LockOnResume false' 2
-wake() { ser 'loginctl unlock-sessions 2>/dev/null; true' 2; mon "mouse_move 5 5"; sleep 1; mon "mouse_move -5 -5"; sleep 2; }
+# and keep the display on: run D5's shots 08-10 came out black because Plasma turned the idle display off (DPMS)
+ser 'kwriteconfig6 --file powerdevilrc --group AC --group Display --key TurnOffDisplayWhenIdle false; kwriteconfig6 --file powerdevilrc --group AC --group Display --key DimDisplayWhenIdle false; kwriteconfig6 --file powerdevilrc --group AC --group SuspendAndShutdown --key AutoSuspendAction 0; systemctl --user restart plasma-powerdevil.service 2>/dev/null; true' 4
+ser '(command -v kde-inhibit >/dev/null && setsid kde-inhibit --power --screenSaver sleep 9000 >/dev/null 2>&1 &) ; true' 2
+wake() { ser 'kscreen-doctor --dpms on >/dev/null 2>&1; loginctl unlock-sessions 2>/dev/null; true' 2; mon "sendkey shift"; mon "mouse_move 5 5"; sleep 1; mon "mouse_move -5 -5"; sleep 2; }
 mark "SOUND CARD"; ser 'pactl list short sinks; pactl list short sources' 3
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
