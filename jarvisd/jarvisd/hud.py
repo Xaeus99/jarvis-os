@@ -16,10 +16,16 @@ FONT_DIRS = ("/usr/share/fonts/jarvis", os.path.join(os.path.dirname(__file__), 
 class HudBus:
     """Writer side (in jarvisd). Atomic writes, so the HUD never reads half a file."""
     def __init__(self, path=HUD_FILE, clock=time.time):
+        import threading
         self.path, self.clock = path, clock
+        self.lock = threading.Lock()                 # the game watcher publishes from its own thread
         self.st = {"state": "idle", "caption": "", "heard": "", "heard_status": "heard", "level": 0.0, "theme": None}
 
     def publish(self, **kw):
+        with self.lock:
+            self._publish(**kw)
+
+    def _publish(self, **kw):
         self.st.update(kw); self.st["ts"] = self.clock()
         if "heard" in kw: self.st["heard_ts"] = self.st["ts"]
         if "caption" in kw: self.st["caption_ts"] = self.st["ts"]
@@ -62,6 +68,7 @@ class Follower:
         c = cfg or {}
         self.idle_hide = float(c.get("idle_hide_seconds", 4))
         self.always = bool(c.get("always_show_on_desktop", False))
+        self.hide_in_games = bool(c.get("hide_in_games", True))
         self.last = {}; self.active_until = 0.0
 
     def tick(self, st):
@@ -77,7 +84,9 @@ class Follower:
             if st.get("state") in ("listening", "thinking", "speaking"):
                 self.active_until = now + self.idle_hide
             self.last = dict(st)
-        want = self.always or now < self.active_until
+        # in a game (jarvisd's game watcher sets "game"): only while JARVIS listens/answers, never just sitting there
+        in_game = bool((st or self.last).get("game")) and self.hide_in_games
+        want = (self.always and not in_game) or now < self.active_until
         if want and not self.hud.isVisible():
             self.hud.show()
         elif not want and self.hud.isVisible():

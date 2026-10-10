@@ -146,6 +146,11 @@ def main():
         try: brain.studio.warm()
         except Exception as e: log.info("OBS warm-up: %r", e)
     threading.Thread(target=warm_obs, name="obs-warm", daemon=True).start()
+    try:                                  # games: HUD stays out of the way, camera greeting pauses, auto game mode
+        from . import gamewatch
+        brain.gamewatch = gamewatch.wire(cfg, brain.run, hud=hud).start()
+    except Exception as e:
+        log.info("game watcher unavailable: %r", e)
     _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone
