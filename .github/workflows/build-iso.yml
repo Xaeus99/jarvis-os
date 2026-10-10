@@ -1,47 +1,92 @@
-# Builds the real (interactive) installer ISO from the published, signed image with bootc-image-builder.
-# Runs by hand (workflow_dispatch, tag input) and when this file or the installer config changes.
-# Output: the ISO + its SHA-256 as a workflow artifact (kept 90 days); size and checksum in the run summary.
+# Builds the real (interactive) installer ISO from the published, signed image with bootc-image-builder,
+# boots it in a KVM virtual machine up to the installer's first screen (screenshots), and publishes it as a
+# GitHub Release split into parts under GitHub's 2 GiB file limit, with download/join scripts and checksums
+# (anyone can download a public release without a GitHub account).
+# Which image and whether to publish: image/disk_config/release.env (a push of that file runs this workflow).
 name: build-iso
 on:
-  workflow_dispatch: { inputs: { tag: { default: "beta" } } }
-  push: { branches: [main], paths: [".github/workflows/build-iso.yml", "image/disk_config/iso.toml"] }
-permissions: { contents: read, packages: read }
+  workflow_dispatch: { inputs: { tag: { default: "" }, publish: { default: "" } } }
+  push: { branches: [main], paths: [".github/workflows/build-iso.yml", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/iso_boot_test.sh", "tools/release/**"] }
+permissions: { contents: write, packages: read }
 concurrency: { group: build-iso, cancel-in-progress: false }
 jobs:
   iso:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: ublue-os/remove-unwanted-software@v9
+      - name: Which image
+        run: |
+          . image/disk_config/release.env
+          REF="${{ inputs.tag }}"; REF="${REF:-$IMAGE_REF}"; PUB="${{ inputs.publish }}"; PUB="${PUB:-$PUBLISH}"
+          CHANNEL="${REF%%@*}"; IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
+          echo "REF=$REF CHANNEL=$CHANNEL PUBLISH=$PUB"
+          { echo "REF=$REF"; echo "CHANNEL=$CHANNEL"; echo "PUB=$PUB"; echo "IMAGE=$IMAGE"; } >> "$GITHUB_ENV"
       - name: Build ISO
         run: |
-          TAG="${{ inputs.tag || 'beta' }}"
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
           mkdir -p output
-          sudo podman pull "$IMAGE:$TAG"
-          VERSION=$(sudo podman run --rm --entrypoint cat "$IMAGE:$TAG" /usr/lib/jarvis-os/version | sed -n 's/^JARVIS_OS_VERSION=//p')
-          DIGEST=$(sudo podman image inspect --format '{{.Digest}}' "$IMAGE:$TAG")
+          sudo podman pull "$IMAGE:$REF"
+          # bib writes the image reference into the installed system as its update source: always the channel tag,
+          # never a pinned digest (a digest would freeze updates)
+          [ "$IMAGE:$REF" = "$IMAGE:$CHANNEL" ] || sudo podman tag "$IMAGE:$REF" "$IMAGE:$CHANNEL"
+          VERSION=$(sudo podman run --rm --entrypoint cat "$IMAGE:$CHANNEL" /usr/lib/jarvis-os/version | sed -n 's/^JARVIS_OS_VERSION=//p')
+          DIGEST=$(sudo podman image inspect --format '{{.Digest}}' "$IMAGE:$CHANNEL")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"; echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+          echo "version $VERSION, image $DIGEST"
           sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ./image/disk_config/iso.toml:/config.toml:ro -v ./output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
-            "$IMAGE:$TAG"
+            "$IMAGE:$CHANNEL"
           sudo chown -R "$USER" output
+          sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h / /mnt
       - name: Name, size and checksum
         run: |
           mkdir -p dist
-          mv output/bootiso/install.iso "dist/jarvis-os-${VERSION}-x86_64.iso"
+          ISO="jarvis-os-${VERSION}-x86_64.iso"; echo "ISO=$ISO" >> "$GITHUB_ENV"
+          mv output/bootiso/install.iso "dist/$ISO"; rm -rf output
           cd dist
-          sha256sum "jarvis-os-${VERSION}-x86_64.iso" > "jarvis-os-${VERSION}-x86_64.iso.sha256"
-          SIZE=$(stat -c %s "jarvis-os-${VERSION}-x86_64.iso")
+          sha256sum "$ISO" > "$ISO.sha256"
+          SIZE=$(stat -c %s "$ISO")
           { echo "### JARVIS OS installer ISO"
-            echo "- file: jarvis-os-${VERSION}-x86_64.iso"
+            echo "- file: $ISO"
             echo "- size: $SIZE bytes ($(numfmt --to=iec-i --suffix=B $SIZE))"
-            echo "- sha256: $(cut -d' ' -f1 jarvis-os-${VERSION}-x86_64.iso.sha256)"
-            echo "- image: ${DIGEST}"
+            echo "- sha256: $(cut -d' ' -f1 $ISO.sha256)"
+            echo "- image: ${IMAGE}@${DIGEST} (channel ${CHANNEL})"
             echo "- untested on real hardware; see docs/INSTALL_DAY.md"; } | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "ISO_SIZE=$SIZE ISO_SHA256=$(cut -d' ' -f1 *.sha256) IMAGE_DIGEST=${DIGEST}"
+      - name: KVM + QEMU + OCR
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr
+      - name: Boot the ISO to the installer screen (VM)
+        run: bash tools/iso_boot_test.sh "dist/$ISO" isoboot
       - uses: actions/upload-artifact@v4
-        with: { name: "jarvis-os-${{ env.VERSION }}-iso", path: dist/, retention-days: 90, compression-level: 0 }
+        if: always()
+        with: { name: iso-boot-screens, path: isoboot/ }
+      - uses: actions/upload-artifact@v4
+        if: env.PUB != 'yes'
+        with: { name: "jarvis-os-${{ env.VERSION }}-iso", path: dist/, retention-days: 30, compression-level: 0 }
+      - name: Split and publish as a GitHub Release (parts under 2 GiB)
+        if: env.PUB == 'yes'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if [ "$CHANNEL" = stable ]; then TAG="v${VERSION}"; else TAG="v${VERSION}-${CHANNEL}.${GITHUB_RUN_NUMBER}"; fi
+          gh release view "$TAG" >/dev/null 2>&1 && TAG="${TAG}.${GITHUB_RUN_NUMBER}"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          sudo install -d -o "$USER" /mnt/rel 2>/dev/null && OUTDIR=/mnt/rel || OUTDIR=$PWD/rel
+          python3 tools/release/make_release.py "dist/$ISO" "$OUTDIR" "$BASE" "$CHANNEL" "$IMAGE:$CHANNEL"
+          rm -f "dist/$ISO"
+          cp isoboot/installer_screen.png "$OUTDIR/installer-screen.png" 2>/dev/null || true
+          FLAGS="--latest=false --prerelease"; [ "$CHANNEL" = stable ] && FLAGS="--latest"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" $FLAGS \
+            --title "JARVIS OS ${VERSION} installer (${CHANNEL})" --notes-file "$OUTDIR/NOTES.md"
+          for f in "$OUTDIR"/get-jarvis-os.bat "$OUTDIR"/get-jarvis-os.sh "$OUTDIR"/SHA256SUMS "$OUTDIR"/installer-screen.png "$OUTDIR"/*.part*; do
+            [ -f "$f" ] || continue
+            for try in 1 2 3; do gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber && break; echo "retry $f"; sleep 20; done
+          done
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[] | "\(.name) \(.size)"' | tee assets.txt
+          N=$(grep -c '\.part[0-9]' assets.txt); WANT=$(ls "$OUTDIR"/*.part* | wc -l)
+          [ "$N" = "$WANT" ] || { echo "::error::only $N of $WANT parts uploaded"; exit 1; }
+          { echo "### Release ${TAG}"; echo "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"; echo '```'; cat assets.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

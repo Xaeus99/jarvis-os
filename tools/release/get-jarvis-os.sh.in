@@ -1,0 +1,22 @@
+#!/bin/sh
+# JARVIS OS installer: downloads the ISO parts from the GitHub Release (no GitHub account needed),
+# joins them into one .iso and checks its SHA-256. Parts already here and complete are skipped.
+# Usage: sh get-jarvis-os.sh   (Linux or macOS; needs curl and sha256sum or shasum)
+set -eu
+cd "$(dirname "$0")"
+ISO=@ISO@
+SHA=@SHA@
+BASE=@BASEURL@
+size() { wc -c < "$1" | tr -d ' '; }
+while read -r p n; do
+  if [ -f "$p" ] && [ "$(size "$p")" = "$n" ]; then echo "$p is already here"; continue; fi
+  echo "Downloading $p ..."; curl -L --fail --retry 5 --retry-delay 5 -C - -o "$p" "$BASE/$p"
+  [ "$(size "$p")" = "$n" ] || { echo "$p is incomplete; run this again"; exit 1; }
+done <<EOF
+@LIST@
+EOF
+echo "Joining the parts into $ISO ..."
+cat @CATPARTS@ > "$ISO"
+if command -v sha256sum >/dev/null; then got=$(sha256sum "$ISO" | cut -d' ' -f1); else got=$(shasum -a 256 "$ISO" | cut -d' ' -f1); fi
+if [ "$got" = "$SHA" ]; then echo "OK: $ISO matches the published SHA-256. You can delete the .part files."
+else echo "CHECKSUM MISMATCH: delete the .part files and $ISO, then run this again."; exit 1; fi

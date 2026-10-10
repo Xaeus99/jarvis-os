@@ -1,0 +1,46 @@
+@echo off
+setlocal
+rem JARVIS OS installer: downloads the ISO parts from the GitHub Release (no GitHub account needed),
+rem joins them into one .iso and checks its SHA-256. Run it from any folder with about 15 GB free.
+rem If the parts are already in this folder (downloaded by hand), it skips the download.
+cd /d "%~dp0"
+set "ISO=@ISO@"
+set "SHA=@SHA@"
+set "BASE=@BASEURL@"
+title JARVIS OS installer download
+echo.
+echo   J.A.R.V.I.S. OS  -  getting %ISO%
+echo   (@NPARTS@ parts; a part that's already here and complete is skipped)
+echo.
+@GETS@
+echo.
+echo Joining the parts into %ISO% ...
+copy /b @JOIN@ "%ISO%" >nul || goto :fail
+echo Checking the SHA-256 (about a minute) ...
+powershell -NoProfile -Command "if ((Get-FileHash -Algorithm SHA256 -LiteralPath '%ISO%').Hash -ieq '%SHA%') { exit 0 } else { exit 1 }"
+if errorlevel 1 (
+  echo.
+  echo   CHECKSUM MISMATCH: the file is damaged. Delete the .part files and %ISO%, then run this again.
+  goto :end
+)
+echo.
+echo   OK: %ISO% is complete and matches the published checksum.
+echo   You can delete the .part files now.
+echo   Next: write it to a USB stick with Fedora Media Writer ("Select .iso file") or Rufus (DD mode).
+goto :end
+
+:get
+if exist "%~1" if "%~z1"=="%~2" ( echo %~1 is already here & exit /b 0 )
+echo Downloading %~1 ...
+curl.exe -L --fail --retry 5 --retry-delay 5 -C - -o "%~1" "%BASE%/%~1"
+if errorlevel 1 exit /b 1
+if not "%~z1"=="%~2" ( echo %~1 is incomplete & exit /b 1 )
+exit /b 0
+
+:fail
+echo.
+echo   Something went wrong (see above). Check the internet connection and free space, then run this again;
+echo   finished parts are kept.
+:end
+echo.
+pause

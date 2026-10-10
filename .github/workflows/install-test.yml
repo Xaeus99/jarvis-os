@@ -1,10 +1,11 @@
 # Dual-boot install test: builds an installer ISO from the published image, installs it unattended into the
 # free space of a virtual disk that already holds a dummy Windows, then boots the result twice.
+# Image: IMAGE_REF in image/disk_config/release.env, the same one the real installer ISO is built from.
 # Pass = every Windows partition and Windows boot file has the same sha256 before and after.
 name: install-test
 on:
-  workflow_dispatch: { inputs: { tag: { default: "beta" } } }
-  push: { branches: [main], paths: [".github/workflows/install-test.yml", "tools/install_test.sh", "image/disk_config/install-test.toml", "image/build_files/fix_repos.py"] }
+  workflow_dispatch: { inputs: { tag: { default: "" } } }
+  push: { branches: [main], paths: [".github/workflows/install-test.yml", "image/disk_config/release.env", "tools/install_test.sh", "image/disk_config/install-test.toml", "image/build_files/fix_repos.py"] }
 permissions: { contents: read, packages: read }
 jobs:
   install:
@@ -21,7 +22,9 @@ jobs:
           chmod +x tools/*.sh; df -h /
       - name: Build the test installer ISO (bootc-image-builder, unattended free-space kickstart)
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:${{ inputs.tag || 'beta' }}"
+          . image/disk_config/release.env   # same image as the installer ISO (IMAGE_REF), unless a tag is given by hand
+          REF="${{ inputs.tag }}"; REF="${REF:-$IMAGE_REF}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:$REF"; echo "testing $IMAGE"
           mkdir -p output
           sudo podman pull "$IMAGE"
           # images built before the repo fix still carry a repo with a missing GPG key; apply the same fix here
