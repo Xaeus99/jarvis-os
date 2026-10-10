@@ -151,7 +151,51 @@ def send_result(fcfg, rcfg, result, post=replies.post, smtp=via_smtp, relay=via_
     return "+".join(routes) or "none"
 
 # ---------------------------------------------------------------- Tab's actions on Linux
-SUPPORTED = ("say", "ping", "launch", "open_url", "media", "volume", "wait", "screenshot")
+SUPPORTED = ("say", "ping", "launch", "open_url", "media", "volume", "wait", "screenshot", "sysinfo", "focus")
+ALIASES = {"focus_window": "focus", "speak": "say", "sleep": "wait", "screen": "screenshot", "app_volume": "volume"}
+
+def sysinfo_text(what=None, windows=None, procs=None):
+    """The "sysinfo" action, as Windows JARVIS answers it: active window, open windows (from KWin; a process list if
+    KWin can't be asked), disk, CPU/RAM, uptime. `windows`/`procs` are injectable for tests."""
+    import psutil
+    from . import kwin
+    want = what or ["window", "apps", "disk", "cpu", "uptime"]
+    want = [want] if isinstance(want, str) else list(want)
+    out, wins, why = [], None, ""
+    if "window" in want or "apps" in want:
+        try:
+            wins = windows() if windows else kwin.list_windows()
+        except kwin.KWinUnavailable as e:
+            why = str(e)
+    if "window" in want:
+        act = next((w for w in (wins or []) if w.get("active")), None)
+        out.append(f"Active window: {act['title']} ({act['app']})" if act else
+                   "Active window: " + ("none" if wins is not None else f"(unknown: {why})"))
+    if "apps" in want:
+        if wins is not None:
+            out.append("Open windows:")
+            out += [f"  {w.get('app') or '?'}: {w.get('title')}" + (" [minimized]" if w.get("minimized") else "")
+                    for w in wins[:60]]
+        else:
+            names = procs() if procs else sorted({(p.info.get("name") or "") for p in psutil.process_iter(["name"])} - {""})
+            out.append(f"Running processes (no window list: {why}): " + ", ".join(names[:80]))
+    if "disk" in want:
+        out.append("Disks:")
+        for part in psutil.disk_partitions(all=False):
+            if part.mountpoint.startswith(("/sysroot", "/boot", "/var/lib/containers")) or "/snap" in part.mountpoint:
+                continue
+            try:
+                u = psutil.disk_usage(part.mountpoint)
+                out.append(f"  {part.mountpoint} {u.free / 2**30:.1f} GB free of {u.total / 2**30:.1f} GB ({u.percent:.0f}% used)")
+            except Exception:
+                pass
+    if "cpu" in want:
+        vm = psutil.virtual_memory()
+        out.append(f"CPU {psutil.cpu_percent(interval=0.3):.0f}%, RAM {vm.percent:.0f}% used of {vm.total / 2**30:.1f} GB")
+    if "uptime" in want:
+        up = time.time() - psutil.boot_time()
+        out.append(f"PC on for {int(up // 3600)} h {int(up % 3600 // 60)} min; {VERSION}")
+    return "\n".join(out)
 
 class ActionRunner:
     """Runs the action list of a sealed message. Only a safe subset exists on Linux so far (the same kinds Windows
@@ -181,6 +225,7 @@ class ActionRunner:
         for a in (msg.get("actions") or [])[:20]:
             t = str(a.get("type", ""))
             r = {"type": t, "ok": False}
+            t = ALIASES.get(t, t)
             try:
                 if t not in SUPPORTED:
                     r["error"] = "not supported on JARVIS OS yet"
@@ -210,6 +255,12 @@ class ActionRunner:
                     else:
                         v, muted = self.hands.master(lvl, mute)
                         r.update(ok=True, note=f"volume {v}%" + (" (muted)" if muted else ""))
+                elif t == "sysinfo":
+                    r.update(ok=True, note=sysinfo_text(a.get("what")))
+                elif t == "focus":
+                    from . import kwin
+                    title = kwin.focus(a.get("title"), a.get("process") or a.get("app"))
+                    r.update(ok=True, note=f"focused: {title}")
                 elif t == "screenshot":
                     r.update(ok=bool(self.hands.screenshot()), note="saved in Pictures/Screenshots")
             except Exception as e:

@@ -116,6 +116,116 @@ def launch_argv(target):
         return [p] if os.access(p, os.X_OK) and not os.path.isdir(p) else ["xdg-open", p]
     return APP_TARGETS.get(t.lower()) or ["gtk-launch", t]
 
+# ---------------------------------------------------------------- quick-launch tile icons
+APP_ICONS = {   # tile target -> icon theme names to try (Flatpak apps export their icon under their app id)
+    "brave": ["com.brave.Browser", "brave-browser"], "chrome": ["com.google.Chrome", "google-chrome"],
+    "spotify": ["com.spotify.Client", "spotify-client", "spotify"], "discord": ["com.discordapp.Discord", "discord"],
+    "obs": ["com.obsproject.Studio", "obs"], "steam": ["steam"], "files": ["org.kde.dolphin", "system-file-manager"],
+    "explorer": ["org.kde.dolphin", "system-file-manager"], "settings": ["systemsettings", "preferences-system"],
+    "terminal": ["org.kde.konsole", "utilities-terminal"],
+}
+
+def data_dirs(env=None):
+    env = os.environ if env is None else env
+    home = os.path.expanduser("~")
+    dirs = [env.get("XDG_DATA_HOME") or os.path.join(home, ".local/share")]
+    dirs += (env.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    dirs += [os.path.join(home, ".local/share/flatpak/exports/share"), "/var/lib/flatpak/exports/share"]
+    out = []
+    for d in dirs:
+        if d and d not in out:
+            out.append(d)
+    return out
+
+def desktop_icon(app_id, dirs=None):
+    """Icon= of an installed .desktop entry (name or path), or None."""
+    name = os.path.basename(app_id)
+    name = name if name.endswith(".desktop") else name + ".desktop"
+    paths = [os.path.expanduser(app_id)] if app_id.startswith(("/", "~")) else []
+    paths += [os.path.join(d, "applications", name) for d in (dirs or data_dirs())]
+    for p in paths:
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                in_entry = False
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("["):
+                        in_entry = line == "[Desktop Entry]"
+                    elif in_entry and line.startswith("Icon="):
+                        return line[5:].strip() or None
+        except OSError:
+            continue
+    return None
+
+def steam_icon(appid, home=None):
+    """Steam's cached icon for an installed game (native Steam, or the Steam Flatpak), or None."""
+    home = home or os.path.expanduser("~")
+    roots = [os.path.join(home, p) for p in (".local/share/Steam", ".steam/steam",
+                                             ".var/app/com.valvesoftware.Steam/.local/share/Steam")]
+    for r in roots:
+        cache = os.path.join(r, "appcache", "librarycache")
+        flat = os.path.join(cache, f"{appid}_icon.jpg")
+        if os.path.isfile(flat):
+            return flat
+        sub = os.path.join(cache, str(appid))     # newer Steam: librarycache/<appid>/<hash>.jpg (the small one is the icon)
+        if os.path.isdir(sub):
+            jpgs = [os.path.join(sub, f) for f in os.listdir(sub) if f.endswith(".jpg") and "/" not in f]
+            jpgs = [j for j in jpgs if os.path.getsize(j) < 200_000]
+            if jpgs:
+                return min(jpgs, key=os.path.getsize)
+    return None
+
+def icon_candidates(entry, dirs=None, home=None):
+    """A tile -> icon theme names and/or image files to try, best first (pure: no Qt). Empty = keep the letter."""
+    t = (entry.get("target") or "").strip()
+    if not t:
+        return []
+    m = re.match(r"^steam://(?:rungameid|run|launch)/(\d+)", t, re.I)
+    if m:
+        f = steam_icon(m.group(1), home)
+        return ([f] if f else []) + ["steam"]
+    if re.match(r"^[a-z][a-z0-9+.-]*://", t, re.I):
+        if t.lower().startswith(("http://", "https://")):
+            if "youtube.com" in t.lower() or "youtu.be" in t.lower():
+                return ["youtube", "internet-web-browser"]
+            return ["internet-web-browser", "applications-internet"]
+        return ["application-x-executable"]
+    if t.endswith(".desktop"):
+        ic = desktop_icon(t, dirs)
+        return [ic] if ic else []
+    if t.startswith(("/", "~")):
+        p = os.path.expanduser(t)
+        return ["folder"] if os.path.isdir(p) else [p + "#file"]       # "#file" = ask Qt's file-icon provider
+    key = t.lower()
+    names = list(APP_ICONS.get(key, []))
+    argv = APP_TARGETS.get(key) or []
+    app_id = argv[2] if argv[:2] == ["flatpak", "run"] else (argv[0] if argv else t)
+    ic = desktop_icon(app_id, dirs)
+    if ic and ic not in names:
+        names.insert(0, ic)
+    if t not in names:
+        names.append(t)
+    return names
+
+def make_icon_for(QtGui, QtWidgets, QtCore):
+    """icon_for(entry) for core.workspace.LaunchPanel: the app's real icon from the icon theme, a .desktop Icon=,
+    Steam's game icon, or the file-type icon; None keeps the tile's letter."""
+    prov = None
+    def icon_for(entry):
+        nonlocal prov
+        for c in icon_candidates(entry):
+            if c.endswith("#file"):
+                prov = prov or QtWidgets.QFileIconProvider()
+                ic = prov.icon(QtCore.QFileInfo(c[:-5]))
+            elif os.path.isabs(c):
+                ic = QtGui.QIcon(c) if os.path.isfile(c) else QtGui.QIcon()
+            else:
+                ic = QtGui.QIcon.fromTheme(c)
+            if not ic.isNull():
+                return ic
+        return None
+    return icon_for
+
 def detached(argv):
     from .studio import detached as d
     return d(argv)
@@ -178,7 +288,8 @@ def _real_window(cfg, QtWidgets, QtCore):
     from . import hud
     hud.load_fonts(QtGui, T)
     T.set_theme(cfg.get("theme", "vibranium"))
-    w = W.Workspace(cfg, data_dir=os.path.join(STATE, "workspace"), hostname=socket.gethostname().split(".")[0])
+    w = W.Workspace(cfg, data_dir=os.path.join(STATE, "workspace"), hostname=socket.gethostname().split(".")[0],
+                    icon_for=make_icon_for(QtGui, QtWidgets, QtCore))
 
     def command(text):
         if ipc.send("daemon", {"cmd": "say", "text": text}) is None:

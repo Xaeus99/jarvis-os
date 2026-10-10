@@ -90,14 +90,39 @@ class MicSource:
     def read(self):
         return self.q.get()
 
-def open_mic(device=None, wait_s=30.0, make=None, sleep=time.sleep):
+def has_input_source(run=None):
+    """Does PipeWire know a real microphone? True/False from `pactl list short sources` (".monitor" sources are speaker
+    loopbacks, not mics); None when it can't be asked (no pactl, no sound server yet)."""
+    import subprocess
+    run = run or subprocess.run
+    try:
+        p = run(["pactl", "list", "short", "sources"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p.returncode != 0:
+        return None
+    for line in (p.stdout or "").splitlines():
+        f = line.split("\t")
+        if len(f) > 1 and f[1].strip() and not f[1].strip().endswith(".monitor"):
+            return True
+    return False
+
+def open_mic(device=None, wait_s=30.0, make=None, sleep=time.sleep, probe=has_input_source):
     """Open the microphone, waiting for one if there is none yet (a PC without a mic, or a headset not plugged in).
-    Before: jarvisd exited and systemd restarted it every few seconds, re-loading the speech model each time."""
+    Before: jarvisd exited and systemd restarted it every few seconds, re-loading the speech model each time.
+    The first attempt always opens the audio driver (its error is logged once). While PipeWire still lists no
+    microphone, later checks ask PipeWire only, because every failed PortAudio open writes an ALSA error line to the
+    system log (one every 30 s, all day, on a PC without a mic)."""
     make = make or MicSource
     said = False
     while True:
+        if said and probe() is False:
+            sleep(wait_s); continue
         try:
-            return make(device)
+            m = make(device)
+            if said:
+                log.info("microphone found; JARVIS is listening")
+            return m
         except Exception as e:
             if not said:
                 log.warning("no microphone yet (%s); JARVIS starts listening as soon as one is plugged in", e)
