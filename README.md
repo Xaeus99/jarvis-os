@@ -10,7 +10,8 @@ modifies Windows.
 
 ## Get your own Tab
 
-JARVIS sends anything that isn't a built-in command to **Tab**, your own AI assistant that texts, browses and gets things done.
+JARVIS works on its own: built-in commands plus a free **offline brain** (a local AI model, no account needed; see [docs/OFFLINE_BRAIN.md](docs/OFFLINE_BRAIN.md)).
+Linking **Tab**, your own AI assistant that texts, browses and gets things done, adds the bigger jobs.
 Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot/r/856A517B3CCACA47)**
 
 | Path | What |

@@ -1,6 +1,5 @@
 [Unit]
 Description=J.A.R.V.I.S. offline brain (local AI model server, localhost only)
-Documentation=file:///usr/share/doc/jarvis-os/OFFLINE_BRAIN.md
 # does nothing until the offline brain has been downloaded (jarvisctl ai setup / jarvis-ai-setup.service)
 ConditionPathExists=%h/.local/share/jarvis/ollama/bin/ollama
 After=graphical-session.target
