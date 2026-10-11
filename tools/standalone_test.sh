@@ -4,6 +4,7 @@
 # (Ollama runtime + the small model, since the VM has no NVIDIA GPU), then talks to JARVIS with no Tab link at all.
 # Everything JARVIS says is recorded from the virtual sound card to OUT/jarvis_voice.wav.
 #   standalone_test.sh DISK.qcow2 OUTDIR
+# Runs on whatever :beta is when the workflow starts (its digest is printed in the "Build a qcow2 disk" step).
 set -u
 DISK=$1; OUT=$2; mkdir -p "$OUT"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
