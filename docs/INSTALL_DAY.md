@@ -61,6 +61,11 @@ back to the exact ISO) and publishes the release. `image/disk_config/release.env
 - [ ] Restart and tap the **boot-menu key** (F11 on most ASRock and MSI boards, F12 on many others). Pick the
       **UEFI** entry for the USB stick. Leave Secure Boot **on**.
 - [ ] Choose **Install JARVIS OS**.
+- [ ] A black **"DUAL-BOOT SAFETY CHECK"** page comes up first. Check that it says **Windows found** and lists your
+      Windows partitions as **LOCKED** (they stay read-only for the whole install, so no later screen can change
+      them), and that it names a disk with enough **free space** (the space you made with Shrink Volume). Press
+      **Enter**. If it says *No Windows install was found* or *Not enough free space*, stop and power off: nothing has
+      been changed. Never type *TOUCH WINDOWS* (that unlocks Windows for advanced partitioning).
 - [ ] **Installation destination:** pick the disk, choose to install into the **free space only**. **Never** choose
       *erase*, *reclaim space* or *delete* anything. If the installer shows the Windows partitions, leave them alone.
 - [ ] **User Creation:** make your user and password, and keep *Make this user administrator* ticked (the root

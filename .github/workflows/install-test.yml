@@ -20,6 +20,11 @@ jobs:
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat ntfs-3g gdisk dosfstools mtools btrfs-progs parted
           chmod +x tools/*.sh; df -h /
+      - name: Dual-boot guard (the installer's Windows safety page) - local checks on loop devices
+        run: |
+          python3 tools/sync_installer_guard.py --check
+          sudo apt-get install -y -qq tesseract-ocr >/dev/null
+          bash tools/test_dualboot_guard.sh
       - name: Build the test installer ISO (bootc-image-builder, unattended free-space kickstart)
         run: |
           . image/disk_config/release.env   # same image as the installer ISO (IMAGE_REF), unless a tag is given by hand
@@ -64,6 +69,14 @@ jobs:
               echo "PASS ($f): Windows partitions (MSR, C:, Recovery), their table entries and Windows Boot Manager files are byte-identical"
             else echo "::error::Windows changed ($f)"; ok=0; fi
           done
+          # the dual-boot guard ran inside the installer, found the dummy Windows, locked it and saw no change after
+          G=$(ls shots/*jarvis-dualboot-guard.log 2>/dev/null | head -1)
+          if [ -n "$G" ] && grep -q "choice=locked" "$G" && grep -q "verdict: Windows partition entries unchanged" "$G" \
+             && [ "$(grep -c '^locked /dev/' "$G")" -ge 3 ]; then
+            echo "PASS (guard): $(grep -c '^locked /dev/' "$G") Windows partitions locked read-only during the install, entries unchanged"
+          else echo "::error::dual-boot guard log missing or not as expected"; cat "$G" 2>/dev/null; ok=0; fi
+          GS=$(for f in shots/i*_install_*.png; do tesseract "$f" - 2>/dev/null | grep -qi "safety check" && { echo "$f"; break; }; done)
+          [ -n "$GS" ] && cp "$GS" shots/dualboot_screen.png && echo "guard page on screen: $GS"
           echo "--- EFI/Boot fallback before/after (informational)"; grep -A3 '^# EFI/Boot' shots/fingerprint_before.txt shots/fingerprint_after_boots.txt
           echo "### install-test: $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
           [ $ok = 1 ]

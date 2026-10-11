@@ -102,7 +102,7 @@ collect)
   for p in "${LOOP}"p*; do
     [ "$(sudo blkid -o value -s TYPE "$p")" = btrfs ] || continue
     sudo mount -o ro,subvolid=5 "$p" $M
-    for f in $(sudo find $M -path '*/var/log/*' \( -name 'jarvis-install-report.txt' -o -name 'jarvis-*post.log' -o -path '*/anaconda/*' \) -type f 2>/dev/null); do
+    for f in $(sudo find $M -path '*/var/log/*' \( -name 'jarvis-install-report.txt' -o -name 'jarvis-*post.log' -o -name 'jarvis-dualboot-guard.log' -o -path '*/anaconda/*' \) -type f 2>/dev/null); do
       sudo cp "$f" "$OUT/$(basename "$(dirname "$f")")__$(basename "$f")"; done
     sudo umount $M
   done

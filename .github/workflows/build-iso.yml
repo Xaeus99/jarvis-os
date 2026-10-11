@@ -59,9 +59,12 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr ntfs-3g gdisk dosfstools mtools parted
       - name: Boot the ISO to the installer screen (VM)
-        run: bash tools/iso_boot_test.sh "dist/$ISO" isoboot
+        run: |
+          python3 tools/sync_installer_guard.py --check
+          sudo install -d -o "$USER" /mnt/win 2>/dev/null && export WINDISK=/mnt/win/windows.raw
+          bash tools/iso_boot_test.sh "dist/$ISO" isoboot
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: iso-boot-screens, path: isoboot/ }
@@ -79,12 +82,13 @@ jobs:
           python3 tools/release/make_release.py "dist/$ISO" "$OUTDIR" "$BASE" "$CHANNEL" "$IMAGE:$CHANNEL"
           rm -f "dist/$ISO"
           cp isoboot/installer_screen.png "$OUTDIR/installer-screen.png" 2>/dev/null || true
+          cp isoboot/dualboot_screen.png "$OUTDIR/dualboot-safety-screen.png" 2>/dev/null || true
           FLAGS="--latest=false --prerelease"; [ "$CHANNEL" = stable ] && FLAGS="--latest"
           # no --target: the tag goes on main's current head. Tagging an older commit whose workflow files differ from
           # main's is refused for the workflow token without the "workflows" permission (HTTP 403, run 38069274774).
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" $FLAGS \
             --title "JARVIS OS ${VERSION} installer (${CHANNEL})" --notes-file "$OUTDIR/NOTES.md"
-          for f in "$OUTDIR"/get-jarvis-os.bat "$OUTDIR"/get-jarvis-os.sh "$OUTDIR"/SHA256SUMS "$OUTDIR"/installer-screen.png "$OUTDIR"/*.part*; do
+          for f in "$OUTDIR"/get-jarvis-os.bat "$OUTDIR"/get-jarvis-os.sh "$OUTDIR"/SHA256SUMS "$OUTDIR"/installer-screen.png "$OUTDIR"/dualboot-safety-screen.png "$OUTDIR"/*.part*; do
             [ -f "$f" ] || continue
             for try in 1 2 3; do gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber && break; echo "retry $f"; sleep 20; done
           done
