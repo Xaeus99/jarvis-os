@@ -248,5 +248,13 @@ def test_ask_coder_streams_and_stops_at_the_deadline():
     assert W.ask_coder("x", opener=_opener(["a"], have=False)) is None            # no coding model: None
     ticks = iter([0, 1, 999, 999, 999])
     seen = []
-    assert W.ask_coder("x", opener=_opener(["{", "a", "b", "}"], seen=seen), deadline=10, clock=lambda: next(ticks)) is None
+    with pytest.raises(TimeoutError):
+        W.ask_coder("x", opener=_opener(["{", "a", "b", "}"], seen=seen), deadline=10, clock=lambda: next(ticks))
     assert seen[1].closed                                                        # connection closed -> Ollama stops
+
+def test_slow_design_says_so(ws, tmp_path):
+    def slow(what, cfg=None):
+        raise TimeoutError()
+    ws.coder = slow
+    out = ws.handle(*W.parse("hologram of a race car with spoilers"))
+    assert "taking too long on this machine" in out and "Sports car" in out

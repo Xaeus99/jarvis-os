@@ -288,7 +288,7 @@ def ask_coder(what, cfg=None, opener=None, deadline=420, clock=time.monotonic):
                 break
             if clock() - t0 > deadline:
                 log.info("holo design: deadline after %d chars", sum(map(len, out)))
-                return None
+                raise TimeoutError("design took too long")
     finally:
         try:
             r.close()
@@ -418,7 +418,14 @@ class Workshop:
         r = None
         try:
             txt = self.coder(what, getattr(self.b, "cfg", None))
-            if txt is None:
+        except TimeoutError:
+            txt = False; note = "slow"
+        except Exception as e:
+            txt = False; log.info("holo design: %r", e)
+        try:
+            if txt is False:
+                pass
+            elif txt is None:
                 note = "nomodel"
             else:
                 cand = {"spec": txt}
@@ -442,6 +449,8 @@ class Workshop:
             return self.say(f"I couldn't design that exactly, {s}, so here's the closest thing I have: {title}.")
         if note == "nomodel":
             return self.say(f"Free-form designs need the coding model, {s}; say write me some code once to download it. Here's {title} meanwhile.")
+        if note == "slow":
+            return self.say(f"That design was taking too long on this machine, {s}; free-form designs need a graphics card to be quick. Here's {title} meanwhile.")
         return self.say(f"Designed: {title}, {s}. {len(sc.get('parts', []))} parts. Drag to orbit, scroll to zoom.")
 
     def edit(self, raw):
