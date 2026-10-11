@@ -38,7 +38,10 @@ ser 'kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false; k
 # and keep the display on: run D5's shots 08-10 came out black because Plasma turned the idle display off (DPMS)
 ser 'kwriteconfig6 --file powerdevilrc --group AC --group Display --key TurnOffDisplayWhenIdle false; kwriteconfig6 --file powerdevilrc --group AC --group Display --key DimDisplayWhenIdle false; kwriteconfig6 --file powerdevilrc --group AC --group SuspendAndShutdown --key AutoSuspendAction 0; systemctl --user restart plasma-powerdevil.service 2>/dev/null; true' 4
 ser '(command -v kde-inhibit >/dev/null && setsid kde-inhibit --power --screenSaver sleep 9000 >/dev/null 2>&1 &) ; true' 2
-wake() { ser 'kscreen-doctor --dpms on >/dev/null 2>&1; loginctl unlock-sessions 2>/dev/null; true' 2; mon "sendkey shift"; mon "mouse_move 5 5"; sleep 1; mon "mouse_move -5 -5"; sleep 2; }
+# loginctl must never ask for a password here: its polkit prompt on this serial console swallowed the NEXT command
+# as the "password" (run 38094046618 lost "close the hologram" and "close vitals" that way); kscreen-doctor needs the
+# Wayland socket (without it, it aborted and dumped core every time)
+wake() { ser 'WAYLAND_DISPLAY=wayland-0 kscreen-doctor --dpms on >/dev/null 2>&1; loginctl --no-ask-password unlock-sessions </dev/null >/dev/null 2>&1; true' 2; mon "sendkey shift"; mon "mouse_move 5 5"; sleep 1; mon "mouse_move -5 -5"; sleep 2; }
 mark "SOUND CARD"; ser 'pactl list short sinks; pactl list short sources' 3
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
