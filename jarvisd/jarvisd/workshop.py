@@ -260,8 +260,11 @@ def scene_from_recipe(r):
         return sc if ok else None
     return None
 
-def ask_coder(what, cfg=None, opener=None, timeout=300):
-    """The local coder model (qwen2.5-coder, the one "write code" uses) answers with a JSON scene. -> text or None."""
+def ask_coder(what, cfg=None, opener=None, deadline=420, clock=time.monotonic):
+    """The local coder model (qwen2.5-coder, the one "write code" uses) answers with a JSON scene. -> text or None.
+    Streamed, with an overall deadline: when it runs out (a slow CPU) the connection is closed, which stops Ollama's
+    generation too, so an abandoned design never keeps the chat models from answering (seen in the VM: a 300 s
+    non-streamed request timed out client-side while Ollama kept generating and the next question got no answer)."""
     from . import localai, creator
     import urllib.request
     c = localai.cfg_of(cfg)
@@ -269,13 +272,29 @@ def ask_coder(what, cfg=None, opener=None, timeout=300):
     if not localai.has_model(creator.CODER, c["url"], op):
         return None
     from .core import holo
-    body = {"model": creator.CODER, "stream": False, "keep_alive": "3m", "format": "json",
-            "options": {"temperature": 0.3, "num_ctx": 4096, "num_predict": 2500},
+    body = {"model": creator.CODER, "stream": True, "keep_alive": "3m", "format": "json",
+            "options": {"temperature": 0.3, "num_ctx": 4096, "num_predict": 1600},
             "messages": [{"role": "system", "content": holo.SPEC_SYSTEM}, {"role": "user", "content": "Design: " + what[:200]}]}
-    with localai._req(c["url"] + "/api/chat", body, timeout=timeout, opener=op) as r:
-        d = json.loads(r.read().decode("utf-8", "replace"))
-    return (d.get("message") or {}).get("content") or None
-
+    t0 = clock(); out = []
+    r = localai._req(c["url"] + "/api/chat", body, timeout=90, opener=op)
+    try:
+        for line in r:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            out.append((d.get("message") or {}).get("content") or "")
+            if d.get("done"):
+                break
+            if clock() - t0 > deadline:
+                log.info("holo design: deadline after %d chars", sum(map(len, out)))
+                return None
+    finally:
+        try:
+            r.close()
+        except Exception:
+            pass
+    return "".join(out) or None
 
 class Workshop:
     def __init__(self, brain, state=None, launch=open_window, close=close_window, coder=ask_coder, threaded=True):

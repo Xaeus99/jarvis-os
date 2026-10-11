@@ -1,6 +1,6 @@
 """Hologram workshop, vitals HUD, update countdown and 3D brain view (Windows JARVIS v5.6 parity): parsing, safety,
 recipes, the window protocol, the countdown, the brain feed and real offscreen renders. No model, no GPU, no network."""
-import datetime, json, os, re
+import datetime, io, json, os, re
 import pytest
 from jarvisd import workshop as W, brainfeed as BF
 from jarvisd.core import holo, brainbus as bb
@@ -222,3 +222,31 @@ def test_brain_routes_workshop_before_makers(tmp_path, monkeypatch):
     b.workshop = W.Workshop(b, state=str(tmp_path), launch=lambda kind: True, threaded=False)
     assert "Earth" in b.handle("Jarvis, show me a 3D model of Earth")
     assert "thought cloud" in b.handle("show your brain")
+
+
+class _Resp(io.BytesIO):
+    def __enter__(self): return self
+    def __exit__(self, *a): self.close()
+
+def _opener(chunks, have=True, seen=None):
+    def op(rq, timeout=None):
+        url = rq.full_url
+        if url.endswith("/api/tags"):
+            return _Resp(json.dumps({"models": [{"name": "qwen2.5-coder:3b"}] if have else []}).encode())
+        body = json.loads(rq.data)
+        if seen is not None: seen.append(body)
+        r = _Resp(b"".join(json.dumps({"message": {"content": c}, "done": i == len(chunks) - 1}).encode() + b"\n" for i, c in enumerate(chunks)))
+        if seen is not None: seen.append(r)
+        return r
+    return op
+
+def test_ask_coder_streams_and_stops_at_the_deadline():
+    seen = []
+    txt = W.ask_coder("a hover bike", opener=_opener(['{"title": "hover', ' bike", "parts": []}'], seen=seen))
+    assert txt == '{"title": "hover bike", "parts": []}'
+    assert seen[0]["stream"] is True and seen[0]["format"] == "json" and seen[1].closed
+    assert W.ask_coder("x", opener=_opener(["a"], have=False)) is None            # no coding model: None
+    ticks = iter([0, 1, 999, 999, 999])
+    seen = []
+    assert W.ask_coder("x", opener=_opener(["{", "a", "b", "}"], seen=seen), deadline=10, clock=lambda: next(ticks)) is None
+    assert seen[1].closed                                                        # connection closed -> Ollama stops
