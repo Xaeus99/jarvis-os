@@ -4,10 +4,25 @@ name: boot-test
 on:
   workflow_dispatch: { inputs: { tag: { default: "beta" } } }
   workflow_run: { workflows: [build-jarvis-os], types: [completed], branches: [main] }   # after every green build
-permissions: { contents: read, packages: read }
+permissions: { contents: read, packages: read, actions: read }
 jobs:
+  # a nightly build-jarvis-os run that skipped itself (main had not moved) pushed no new image: nothing to boot
+  fresh:
+    runs-on: ubuntu-24.04
+    outputs: { built: "${{ steps.f.outputs.built }}" }
+    steps:
+      - id: f
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          built=yes
+          if [ "${{ github.event_name }}" = workflow_run ]; then
+            c=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs" --jq '[.jobs[] | select(.name == "build")][0].conclusion' || echo "")
+            [ "$c" = success ] || built=no
+          fi
+          echo "build job: ${c:-n/a}; boot test runs: $built"; echo "built=$built" >> "$GITHUB_OUTPUT"
   boot:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: fresh
+    if: needs.fresh.outputs.built == 'yes' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:

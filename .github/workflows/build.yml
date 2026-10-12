@@ -3,13 +3,31 @@
 # separate manual job after the beta has booted on a test machine.
 name: build-jarvis-os
 on:
-  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md", ".github/workflows/install-test.yml", ".github/workflows/boot-test.yml", ".github/workflows/build-iso.yml", "tools/install_test.sh", "tools/boot_test.sh", "tools/iso_boot_test.sh", "tools/standalone_test.sh", ".github/workflows/standalone-test.yml", ".github/workflows/promote-stable.yml", "tools/release/**", "image/disk_config/**"] }
+  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md", ".github/workflows/install-test.yml", ".github/workflows/boot-test.yml", ".github/workflows/build-iso.yml", "tools/install_test.sh", "tools/boot_test.sh", "tools/iso_boot_test.sh", "tools/standalone_test.sh", ".github/workflows/standalone-test.yml", ".github/workflows/promote-stable.yml", "tools/release/**", "image/disk_config/**", "image/installer/**", "tools/sync_installer_guard.py", "tools/test_dualboot_guard.sh", "tools/make_installer_art.py", "tools/clickthrough_test.sh", "tools/vmctl.py", ".github/workflows/clickthrough-test.yml"] }
   schedule: [{ cron: "15 6 * * *" }]     # daily, after Bazzite's own nightly
   workflow_dispatch:
-permissions: { contents: read, packages: write, id-token: write }
+permissions: { contents: read, packages: write, id-token: write, actions: read }
 concurrency: { group: build-jarvis-os, cancel-in-progress: false }
 jobs:
+  # The base image is pinned by digest, so a nightly run of a commit that already has a green build makes a byte-for-byte
+  # duplicate :beta with a new digest (and a boot test of it). Nightly runs only build when main moved since then.
+  gate:
+    runs-on: ubuntu-24.04
+    outputs: { go: "${{ steps.g.outputs.go }}" }
+    steps:
+      - id: g
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          go=yes
+          if [ "${{ github.event_name }}" = schedule ]; then
+            last=$(gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=10" \
+                   --jq '[.workflow_runs[] | select(.id != ${{ github.run_id }})][0].head_sha' || echo "")
+            if [ "$last" = "${{ github.sha }}" ]; then go=no; echo "main (${last:0:7}) already has a green build; nightly duplicate skipped" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
   test:
+    needs: gate
+    if: needs.gate.outputs.go == 'yes'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
