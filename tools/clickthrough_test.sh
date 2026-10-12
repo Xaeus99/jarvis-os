@@ -54,12 +54,13 @@ case $MODE in
 esac
 T0=$(date +%s)
 
-# 2. the installer's window: language page -> Continue
-waitfor "what language|welcome to" 420 lang || fail "the installer window never came up after the safety page"
+# 2. the installer's window: language page -> Continue (a kickstart that already names the user goes straight to the
+#    summary, as in run 38321495176)
+waitfor "what language|welcome to|installation summary" 420 lang || fail "the installer window never came up after the safety page"
 [ "$MODE" = timeout ] && { W=$(( $(date +%s) - T0 )); echo "installer came up ${W}s after the safety page"; [ $W -ge 100 ] || fail "the page continued after only ${W}s with nothing typed"; }
 cp "$LAST" "$OUT/installer_welcome.png"
-key alt-c; sleep 5
-waitfor "installation summary" 120 hub || fail "no installation summary after Continue"
+if ! has "installation summary"; then key alt-c; sleep 5
+  waitfor "installation summary" 120 hub || fail "no installation summary after Continue"; fi
 cp "$LAST" "$OUT/installer_summary.png"
 
 # 3. Installation Destination > (disk ticked) > Automatic > Done

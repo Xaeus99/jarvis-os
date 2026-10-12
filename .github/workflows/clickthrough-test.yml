@@ -4,12 +4,12 @@
 # Each: Automatic > Done > Begin Installation, then Windows must be byte-identical (partitions, table entries,
 # Windows Boot Manager files), the new system must boot, and the guard's log must say what was chosen.
 # The only change to the released kickstart: a test user account, so the User Creation screen is already done.
+# The ISO gets the same JARVIS installer look as the released one (tools/release/brand_iso.sh).
 name: clickthrough-test
 on:
   workflow_dispatch: {}
-  push: { branches: [main], paths: [".github/workflows/clickthrough-test.yml", "tools/clickthrough_test.sh", "tools/vmctl.py", "image/disk_config/iso.toml", "image/disk_config/release.env"] }
+  push: { branches: [main], paths: [".github/workflows/clickthrough-test.yml", "tools/clickthrough_test.sh", "tools/vmctl.py", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/release/brand_iso.sh", "image/installer/art/**"] }
 permissions: { contents: read, packages: read }
-concurrency: { group: clickthrough-test, cancel-in-progress: true }
 jobs:
   click:
     strategy: { fail-fast: false, matrix: { mode: [enter, timeout, unlock] } }
@@ -45,6 +45,7 @@ jobs:
             quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
             "$IMAGE:$CHANNEL"
           sudo chown -R "$USER" output; ls -la output/bootiso
+          bash tools/release/brand_iso.sh output/bootiso/install.iso   # the same JARVIS look the released ISO gets
           sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h / /mnt
       - name: Dummy Windows disk
         run: |

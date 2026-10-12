@@ -6,7 +6,7 @@
 name: build-iso
 on:
   workflow_dispatch: { inputs: { tag: { default: "" }, publish: { default: "" } } }
-  push: { branches: [main], paths: [".github/workflows/build-iso.yml", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/iso_boot_test.sh", "tools/release/**"] }
+  push: { branches: [main], paths: [".github/workflows/build-iso.yml", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/iso_boot_test.sh", "tools/release/**", "image/installer/art/**"] }
 permissions: { contents: write, packages: read }
 concurrency: { group: build-iso, cancel-in-progress: false }
 jobs:
@@ -41,6 +41,8 @@ jobs:
             "$IMAGE:$CHANNEL"
           sudo chown -R "$USER" output
           sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h / /mnt
+      - name: JARVIS look in the installer (images/product.img)
+        run: bash tools/release/brand_iso.sh output/bootiso/install.iso
       - name: Name, size and checksum
         run: |
           mkdir -p dist

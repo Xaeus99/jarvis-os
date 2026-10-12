@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Installer artwork for the JARVIS OS installer (Anaconda) in the Vibranium palette: the sidebar background, the
 sidebar logo and the spoke top bar. Pure PIL. Usage: make_installer_art.py OUT_DIR
-The PNGs are committed under image/installer/art/ and embedded into the kickstart by tools/sync_installer_guard.py;
-image/installer/installer-branding.sh (kickstart %pre) puts them over the base's installer pictures."""
+The PNGs are committed under image/installer/art/; tools/release/brand_iso.sh packs them (with art/fedora.css, the
+installer's own colour sheet with the JARVIS colour) into the ISO as images/product.img, which the installer's early
+boot unpacks over its own files before the installer window starts."""
 import math, os, sys
 from PIL import Image, ImageDraw, ImageFont
 
