@@ -67,8 +67,9 @@ done
 NWIN=${#WINPARTS[@]}
 # lock first, ask second: Windows is protected from the very first moment
 for p in "${WINPARTS[@]}"; do blockdev --setro "$p" && log "locked $p ro=$(blockdev --getro "$p")"; done
-page() {
-  echo; echo "  J.A.R.V.I.S. OS INSTALLER  -  DUAL-BOOT SAFETY CHECK"; echo "  ===================================================="; echo
+page() { # page [color]: the screen copy gets the JARVIS colours, the log copy stays plain text
+  local H="" L="" N=""; [ "${1:-}" = color ] && H=$'\033[1;97m' L=$'\033[1;35m' N=$'\033[0m'
+  echo; echo "  ${H} J.A.R.V.I.S. OS INSTALLER  -  DUAL-BOOT SAFETY CHECK ${N}"; echo "  ${L}====================================================${N}"; echo
   if [ "$NWIN" -gt 0 ] || [ "$ESPWIN" = 1 ]; then
     echo "  Windows found on this PC:"; printf '%s\n' "${LINES[@]}"; echo
     echo "  Windows stays exactly as it is. Its partitions are LOCKED read-only for this"
@@ -99,9 +100,10 @@ page() {
 TTY=/dev/tty$TTYN; ORIG=""
 if [ "$TTYN" = stdout ]; then exec 3>&1; TTY=/dev/stdin
 else ORIG=$(fgconsole 2>/dev/null); exec 3>"$TTY"; chvt "$TTYN" 2>/dev/null; printf '\033[2J\033[H' >&3; fi
-page >&3 2>&1; page >> "$LOG"
+page color >&3 2>&1; page >> "$LOG"
 exec 4<"${JARVIS_GUARD_INPUT:-$TTY}"
-ans=""; read -r -t "$WAIT" ans <&4 2>/dev/null
+ans=""; read -r -t "$WAIT" ans <&4 2>/dev/null; rc=$?
+if [ $rc -gt 128 ]; then HOW=timeout; elif [ -n "$ans" ]; then HOW=typed; else HOW=enter; fi
 CHOICE=locked
 if [ "$NWIN" -gt 0 ] && [ "$ans" = "TOUCH WINDOWS" ]; then
   { echo; echo "  Unlocking lets the next screens change Windows partitions. A wrong click there can"
@@ -109,7 +111,7 @@ if [ "$NWIN" -gt 0 ] && [ "$ans" = "TOUCH WINDOWS" ]; then
   ans2=""; read -r -t "$WAIT" ans2 <&4 2>/dev/null
   if [ "$ans2" = YES ]; then CHOICE=unlocked; for p in "${WINPARTS[@]}"; do blockdev --setrw "$p" && log "unlocked $p"; done; fi
 fi
-log "choice=$CHOICE windows_partitions=$NWIN esp_windows=$ESPWIN bitlocker=$BITLOCKER best_free=$BEST_FREE on $BEST_DISK answer=$( [ -n "$ans" ] && echo given || echo none)"
+log "choice=$CHOICE windows_partitions=$NWIN esp_windows=$ESPWIN bitlocker=$BITLOCKER best_free=$BEST_FREE on $BEST_DISK answer=$( [ -n "$ans" ] && echo given || echo none) how=$HOW"
 echo "  Windows: $CHOICE. Starting the installer..." >&3; sleep 2
 [ -n "$ORIG" ] && chvt "$ORIG" 2>/dev/null
 exit 0
