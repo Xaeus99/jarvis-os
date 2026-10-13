@@ -30,19 +30,27 @@ waitfor() { # waitfor REGEX SECONDS NAME -> polls the screen every 10 s
   local t=0; while alive && [ $t -lt $2 ]; do sleep 10; t=$((t+10)); shot "$3_${t}s"; has "$1" && return 0
     has "unknown error|an error occurred|traceback" && fail "installer error on screen ($(basename "$LAST"))"; done; return 1; }
 
-rm -f /tmp/vars.fd; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
-qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-  -drive if=pflash,format=raw,file=/tmp/vars.fd \
-  -drive file="$DISK",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
-  -drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1 \
-  -device virtio-vga -display none -nic user,model=virtio-net-pci -usb -device usb-tablet \
-  -monitor unix:$MON,server,nowait -qmp unix:$QMP,server,nowait -serial file:"$OUT/serial.log" -no-reboot &
-QPID=$!; sleep 14; shot boot_menu
-key up; key ret                                            # "Install ..." (skips the media check)
+startvm() { # startvm N: fresh VM (fresh firmware variables) booting the ISO's "Install" entry
+  rm -f /tmp/vars.fd $MON $QMP; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
+  qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=/tmp/vars.fd \
+    -drive file="$DISK",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
+    -drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1 \
+    -device virtio-vga -display none -nic user,model=virtio-net-pci -usb -device usb-tablet \
+    -monitor unix:$MON,server,nowait -qmp unix:$QMP,server,nowait -serial file:"$OUT/serial_$1.log" -no-reboot &
+  QPID=$!; sleep 14; shot "a$1_boot_menu"
+  key up; key ret; }                                       # "Install ..." (skips the media check)
 
-# 1. the dual-boot safety page
-waitfor "safety check" 600 boot || fail "the dual-boot safety page never came up"
+# 1. the dual-boot safety page. The installer's own early boot has hung at "Switch Root" before anything runs
+#    (install-test 38025874881, clickthrough 38326276668): then one retry in a fresh VM, as iso_boot_test.sh does.
+#    Nothing has touched the disk at that point (the safety page itself comes first).
+startvm 1
+if ! waitfor "safety check" 600 boot; then
+  echo "::warning::no safety page within 10 min (stuck at: $(tail -1 "${LAST%.png}.txt")); retrying in a fresh VM"
+  mon quit; sleep 3; alive && kill "$QPID"; sleep 2
+  startvm 2; waitfor "safety check" 600 boot2 || fail "the dual-boot safety page never came up (2 tries)"
+fi
 has "windows found" && has "locked" || fail "the safety page did not say Windows was found and locked"
 cp "$LAST" "$OUT/safety_page.png"
 case $MODE in
@@ -98,5 +106,13 @@ while alive && [ $t -lt 2700 ]; do sleep 30; t=$((t+30)); shot "install_${t}s"
   has "unknown error|an error occurred|traceback" && fail "installer error after ${t}s"; done
 [ $ok = 1 ] || fail "no Complete! within 45 min"
 cp "$LAST" "$OUT/install_complete.png"
-mon quit; sleep 3; alive && kill "$QPID"
+# 5. Reboot System, as a person would: the installer unmounts the new system cleanly, then the VM stops (-no-reboot).
+#    (Switching the VM off at "Complete!" lost the installer's last writes, its logs: run 38326276668.)
+key alt-r                                    # the button's own shortcut (_Reboot System)
+t2=0; while alive && [ $t2 -lt 300 ]; do sleep 5; t2=$((t2+5))
+  if [ $t2 = 30 ] && alive; then   # OCR can't read white-on-blue: the button sits in the bottom-right corner
+    read -r w h < <(python3 -c "import struct,sys; print(*struct.unpack('>II', open(sys.argv[1],'rb').read(24)[16:24]))" "$LAST")
+    echo "clicking Reboot System at $((w-73)),$((h-30))"; python3 "$here/vmctl.py" $QMP click $((w-73)) $((h-30)) "$LAST"; fi
+done
+if alive; then echo "::warning::still running 5 min after Reboot System; powering off"; mon system_powerdown; sleep 60; alive && mon quit; sleep 3; fi
 echo "PASS ($MODE): safety page answered ($MODE), Automatic > Done > Begin Installation, install complete after ~${t}s" | tee "$OUT/verdict.txt"
