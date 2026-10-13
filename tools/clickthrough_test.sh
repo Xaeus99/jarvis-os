@@ -77,11 +77,14 @@ cp "$LAST" "$OUT/installer_summary.png"
 FULLNAME="Test Owner"; NEWUSER=owner; NEWPASS=jarvis-install-test
 make_user() {
   click "user creation" || click "creation" || fail "could not find User Creation on the summary"
-  waitfor "create user|full name|user name" 60 user || fail "User Creation did not open"
+  waitfor "create user|full ?name|user ?name" 60 user || fail "User Creation did not open"
   cp "$LAST" "$OUT/user_creation_empty.png"
-  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "full name" 60 || fail "no Full name box"; sleep 0.5
+  # (OCR reads the labels as "Full name" or "fullname"; the Full name box already has the focus when the page opens)
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "full name" 60 || python3 "$here/vmctl.py" $QMP clickafter "$LAST" "fullname" 60 \
+    || echo "Full name label not read; typing into the focused box"; sleep 0.5
   key ctrl-a; typetext "$FULLNAME"; sleep 1
-  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "user name" 60 || fail "no User name box"; sleep 0.5
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "user name" 60 || python3 "$here/vmctl.py" $QMP clickafter "$LAST" "username" 60 \
+    || { echo "User name label not read; Tab to it"; key tab; }; sleep 0.5
   key ctrl-a; typetext "$NEWUSER"; sleep 1
   python3 "$here/vmctl.py" $QMP clickafter "$LAST" "password" 60 alone || fail "no Password box"; sleep 0.5
   typetext "$NEWPASS"; sleep 1
@@ -95,7 +98,7 @@ if has "user creation"; then
   make_user
   if ! has "administrator"; then   # not an admin yet: tick "Add administrative privileges" (its label toggles it)
     echo "user is not an administrator yet: ticking the box"
-    click "user creation" || click "creation"; waitfor "create user|full name" 60 user2 || fail "User Creation did not reopen"
+    click "user creation" || click "creation"; waitfor "create user|full ?name" 60 user2 || fail "User Creation did not reopen"
     click "administrative" || fail "no administrative-privileges box"; sleep 1; shot admin_ticked
     click "done" || key alt-d; sleep 4; shot admin_done1; has "installation summary" || { click "done" || key alt-d; sleep 4; }
     waitfor "installation summary" 60 hub_admin || fail "did not return to the summary after ticking administrator"

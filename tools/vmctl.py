@@ -47,7 +47,7 @@ def boxes(png, phrase, alone=False):
     for i in range(len(words) - len(want) + 1):
         if all(words[i + k][0] == want[k] for k in range(len(want))):
             ws = words[i:i + len(want)]
-            if alone and sum(1 for w in words if w[5] == ws[0][5]) != len(want): continue
+            if alone and sum(1 for w in words if w[5] == ws[0][5] and any(ch.isalnum() for ch in w[0])) != len(want): continue
             hits.append((min(w[1] for w in ws), min(w[2] for w in ws), max(w[1] + w[3] for w in ws), max(w[2] + w[4] for w in ws)))
     return hits
 
