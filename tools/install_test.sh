@@ -104,7 +104,19 @@ collect)
     sudo mount -o ro,subvolid=5 "$p" $M
     for f in $(sudo find $M -path '*/var/log/*' \( -name 'jarvis-install-report.txt' -o -name 'jarvis-*post.log' -o -name 'jarvis-dualboot-guard.log' -o -path '*/anaconda/*' \) -type f 2>/dev/null); do
       sudo cp "$f" "$OUT/$(basename "$(dirname "$f")")__$(basename "$f")"; done
+    if [ -n "${LOGIN_USER:-}" ]; then   # the account typed in during the click-through install, and its first login
+      E="$OUT/login_evidence.txt"
+      pw=$(sudo find $M -maxdepth 9 -path '*/ostree/deploy/*/deploy/*/etc/passwd' 2>/dev/null | head -1)
+      if [ -n "$pw" ] && sudo grep -q "^$LOGIN_USER:" "$pw"; then
+        echo "user $LOGIN_USER exists ($(sudo grep "^$LOGIN_USER:" "$pw" | cut -d: -f5,7))" >> "$E"
+        sudo grep -Eq "^wheel:[^:]*:[0-9]*:(.*,)?$LOGIN_USER(,|$)" "$(dirname "$pw")/group" && echo "admin $LOGIN_USER yes (wheel)" >> "$E"
+      fi
+      for h in $(sudo find $M -maxdepth 9 -type d -path "*/home/$LOGIN_USER" 2>/dev/null); do
+        n=$(sudo find "$h/.config" "$h/.local" -type f 2>/dev/null | wc -l)
+        [ "$n" -gt 0 ] && { echo "logged-in $LOGIN_USER yes ($n files in .config/.local, written by the first login)"; sudo ls "$h/.config" | head -12 | tr '\n' ' '; echo; } >> "$E" && break
+      done
+    fi
     sudo umount $M
   done
-  sudo chown -R "$USER" "$OUT"; loopdown; ls -la "$OUT" ;;
+  sudo chown -R "$USER" "$OUT"; loopdown; ls -la "$OUT"; cat "$OUT/login_evidence.txt" 2>/dev/null || true ;;
 esac

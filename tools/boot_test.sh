@@ -17,6 +17,8 @@ typekeys() { # QEMU sendkey names for a plain lowercase/digit/dash string
   local s=$1 i c
   for ((i=0; i<${#s}; i++)); do c=${s:i:1}; [ "$c" = "-" ] && c=minus; mon "sendkey $c"; sleep 0.15; done; }
 sleep 4; shot 00_firmware
+# the first minute every 2 s: firmware, boot menu and the JARVIS boot splash (Plymouth)
+for i in $(seq -w 1 24); do sleep 1.2; shot "00_early_$i"; done
 for t in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 20; shot "$(printf '%02d' $t)_boot_$((t*20))s"; done
 # login screen should be up by now (~4 min under KVM): type the test user's password
 mon "sendkey ret"; sleep 2
@@ -32,6 +34,8 @@ ser "echo jarvis-boot-test | sudo -S true" 4
 ser "sudo systemctl --no-pager --failed; sudo journalctl -b --no-pager -u jarvis-grub-theme -u tuned-ppd | tail -40" 6
 ser "systemctl --no-pager --machine=jarvis@ --user status jarvisd jarvis-first-boot-apps jarvis-first-login-tuning 2>&1 | head -60" 6
 ser "cat /usr/lib/jarvis-os/version; rpm-ostree status --booted | head -8" 4
+# boot splash: the default theme and whether it is inside the initramfs the system booted with
+ser "echo SPLASH_BEGIN; plymouth-set-default-theme; cat /proc/cmdline; sudo lsinitrd /usr/lib/modules/\$(uname -r)/initramfs.img | grep -c plymouth/themes/jarvis; echo SPLASH_END" 10
 # window list from the real KWin (jarvisd/kwin.py) and the workspace panel on the real desktop (Ctrl+Shift+J path)
 ser 'export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus' 1
 ser 'echo KWIN_LIST_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10

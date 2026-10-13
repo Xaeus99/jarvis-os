@@ -10,4 +10,4 @@ minsize = "40 GiB"
 
 # serial console + the journal on it, so the CI log shows why a service failed (test disk only)
 [customizations.kernel]
-append = "console=tty0 console=ttyS0,115200 systemd.journald.forward_to_console=1"
+append = "console=tty0 console=ttyS0,115200 systemd.journald.forward_to_console=1 plymouth.ignore-serial-consoles"

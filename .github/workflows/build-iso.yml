@@ -67,6 +67,21 @@ jobs:
           python3 tools/sync_installer_guard.py --check
           sudo install -d -o "$USER" /mnt/win 2>/dev/null && export WINDISK=/mnt/win/windows.raw
           bash tools/iso_boot_test.sh "dist/$ISO" isoboot
+      - name: USB stick, written byte for byte (what Fedora Media Writer and Rufus DD mode do), boots on UEFI and on BIOS
+        run: |
+          sudo install -d -o "$USER" /mnt/usb 2>/dev/null && U=/mnt/usb || U=$PWD/usbwork
+          mkdir -p "$U"; STICK=$U/usb-stick-16g.raw
+          truncate -s 16G "$STICK"                                   # a blank 16 GB stick
+          dd if="dist/$ISO" of="$STICK" bs=4M conv=notrunc,fsync status=none
+          N=$(stat -c %s "dist/$ISO")
+          if cmp -n "$N" "dist/$ISO" "$STICK"; then echo "stick holds the ISO byte for byte ($N bytes)"; else echo "::error::USB write differs from the ISO"; exit 1; fi
+          sudo install -d -o "$USER" /mnt/win 2>/dev/null && export WINDISK=/mnt/win/windows.raw
+          ok=1
+          BOOT_MEDIA=usb FIRMWARE=uefi bash tools/iso_boot_test.sh "$STICK" isoboot/usb-uefi || ok=0
+          BOOT_MEDIA=usb FIRMWARE=bios bash tools/iso_boot_test.sh "$STICK" isoboot/usb-bios || ok=0
+          rm -f "$STICK"
+          { echo "### USB stick boot"; cat isoboot/usb-uefi/verdict.txt isoboot/usb-bios/verdict.txt 2>/dev/null; } | tee -a "$GITHUB_STEP_SUMMARY"
+          [ $ok = 1 ]
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: iso-boot-screens, path: isoboot/ }

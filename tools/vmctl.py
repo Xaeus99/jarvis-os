@@ -4,6 +4,8 @@
   vmctl.py QMP_SOCK clickword PNG WORD [N]    OCR PNG (tesseract tsv), click the centre of the Nth match of WORD
                                               (a word or a two-word phrase, case-insensitive); exit 1 if not found
   vmctl.py - find PNG WORD                    print "x y" of WORD's centre, exit 1 if not found
+  vmctl.py QMP_SOCK clickafter PNG WORD DX [alone]   click DX pixels right of WORD's right edge (the text box next to
+                                              a form label); "alone": only a match that is the whole OCR line
 """
 import json, socket, subprocess, sys, time
 import struct
@@ -31,20 +33,26 @@ def click(sock, x, y, w, h):
         {"type": "btn", "data": {"down": down, "button": "left"}}]}}
     qmp(sock, [mv]); time.sleep(0.4); qmp(sock, [btn(True)]); time.sleep(0.15); qmp(sock, [btn(False)])
 
-def find(png, phrase, nth=1):
+def words_of(png):
     out = subprocess.run(["tesseract", png, "-", "tsv"], capture_output=True, text=True).stdout.splitlines()
     words = []
     for line in out[1:]:
         p = line.split("\t")
-        if len(p) == 12 and p[11].strip():
-            words.append((p[11].strip().lower().strip(".,:;!?\"'()"), int(p[6]), int(p[7]), int(p[8]), int(p[9])))
-    want = phrase.lower().split(); hits = []
+        if len(p) == 12 and p[11].strip():   # text, left, top, width, height, (block, paragraph, line)
+            words.append((p[11].strip().lower().strip(".,:;!?\"'()"), int(p[6]), int(p[7]), int(p[8]), int(p[9]), (p[2], p[3], p[4])))
+    return words
+
+def boxes(png, phrase, alone=False):
+    words = words_of(png); want = phrase.lower().split(); hits = []
     for i in range(len(words) - len(want) + 1):
         if all(words[i + k][0] == want[k] for k in range(len(want))):
             ws = words[i:i + len(want)]
-            x0, y0 = min(w[1] for w in ws), min(w[2] for w in ws)
-            x1, y1 = max(w[1] + w[3] for w in ws), max(w[2] + w[4] for w in ws)
-            hits.append(((x0 + x1) // 2, (y0 + y1) // 2))
+            if alone and sum(1 for w in words if w[5] == ws[0][5]) != len(want): continue
+            hits.append((min(w[1] for w in ws), min(w[2] for w in ws), max(w[1] + w[3] for w in ws), max(w[2] + w[4] for w in ws)))
+    return hits
+
+def find(png, phrase, nth=1):
+    hits = [((x0 + x1) // 2, (y0 + y1) // 2) for x0, y0, x1, y1 in boxes(png, phrase)]
     return hits[nth - 1] if len(hits) >= nth else None
 
 if __name__ == "__main__":
@@ -53,6 +61,12 @@ if __name__ == "__main__":
         png = sys.argv[5] if len(sys.argv) > 5 else None
         w, h = size(png) if png else (1280, 800)
         click(sock, int(sys.argv[3]), int(sys.argv[4]), w, h)
+    elif cmd == "clickafter":
+        png, word, dx = sys.argv[3], sys.argv[4], int(sys.argv[5])
+        hits = boxes(png, word, alone=len(sys.argv) > 6 and sys.argv[6] == "alone")
+        if not hits: print(f"not found: {word}"); sys.exit(1)
+        x0, y0, x1, y1 = hits[0]; x, y = x1 + dx, (y0 + y1) // 2
+        print(x, y); w, h = size(png); click(sock, x, y, w, h)
     elif cmd in ("clickword", "find"):
         png, word = sys.argv[3], sys.argv[4]; nth = int(sys.argv[5]) if len(sys.argv) > 5 else 1
         hit = find(png, word, nth)

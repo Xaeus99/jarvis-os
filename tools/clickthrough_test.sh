@@ -8,8 +8,8 @@
 #   unlock   type TOUCH WINDOWS, ENTER, YES, ENTER (advanced)       -> the Windows partitions are unlocked
 # Then, in the installer's own window: Continue (language) > Installation Destination > Automatic (the default)
 # > Done > Begin Installation, exactly as the safety page says; waits for "Complete!" and switches the VM off.
-# Nothing else is chosen: the test ISO only adds a user account to the kickstart so the User Creation screen is
-# already filled in. The workflow then checks every Windows partition and boot file byte for byte, boots the new
+# Then User Creation, typed in the way he will do it (full name, user name, administrator, password twice); the
+# test ISO's kickstart is the released one, unchanged (no pre-made user). The workflow then checks every Windows partition and boot file byte for byte, boots the new
 # system once and reads the guard's log off the installed disk.
 set -u
 MODE=$1; ISO=$2; DISK=$3; OUT=$4; mkdir -p "$OUT"
@@ -23,7 +23,7 @@ has() { grep -Eq "$1" "${LAST%.png}.txt"; }
 click() { python3 "$here/vmctl.py" $QMP clickword "$LAST" "$@"; }
 key() { mon "sendkey $1"; sleep 0.25; }
 typetext() { local s=$1 i c; for ((i=0; i<${#s}; i++)); do c=${s:i:1}
-    case $c in " ") c=spc;; [A-Z]) c="shift-$(echo "$c" | tr A-Z a-z)";; esac; key "$c"; done; }
+    case $c in " ") c=spc;; "-") c=minus;; ".") c=dot;; [A-Z]) c="shift-$(echo "$c" | tr A-Z a-z)";; esac; key "$c"; done; }
 alive() { kill -0 "$QPID" 2>/dev/null; }
 fail() { echo "FAIL ($MODE): $*" | tee "$OUT/verdict.txt"; echo "::error::$*"; shot fail; mon quit; sleep 2; exit 1; }
 waitfor() { # waitfor REGEX SECONDS NAME -> polls the screen every 10 s
@@ -70,6 +70,42 @@ cp "$LAST" "$OUT/installer_welcome.png"
 if ! has "installation summary"; then key alt-c; sleep 5
   waitfor "installation summary" 120 hub || fail "no installation summary after Continue"; fi
 cp "$LAST" "$OUT/installer_summary.png"
+
+# 3b. User Creation, typed in like a person: the released kickstart makes no user, so the summary asks for one.
+#     Full name, user name, administrator (wheel), password twice, Done (twice: the installer asks once more for a
+#     weak password). The new system is then logged into with this password (install_test.sh boot + collect).
+FULLNAME="Test Owner"; NEWUSER=owner; NEWPASS=jarvis-install-test
+make_user() {
+  click "user creation" || click "creation" || fail "could not find User Creation on the summary"
+  waitfor "create user|full name|user name" 60 user || fail "User Creation did not open"
+  cp "$LAST" "$OUT/user_creation_empty.png"
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "full name" 60 || fail "no Full name box"; sleep 0.5
+  key ctrl-a; typetext "$FULLNAME"; sleep 1
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "user name" 60 || fail "no User name box"; sleep 0.5
+  key ctrl-a; typetext "$NEWUSER"; sleep 1
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "password" 60 alone || fail "no Password box"; sleep 0.5
+  typetext "$NEWPASS"; sleep 1
+  python3 "$here/vmctl.py" $QMP clickafter "$LAST" "confirm password" 60 || fail "no Confirm password box"; sleep 0.5
+  typetext "$NEWPASS"; sleep 2; shot user_filled; cp "$LAST" "$OUT/user_creation_filled.png"
+  has "$NEWUSER" || fail "the user name did not show up in the box"
+  click "done" || key alt-d; sleep 4; shot user_done1
+  if ! has "installation summary"; then echo "still on User Creation (weak-password warning?): Done again"; click "done" || key alt-d; sleep 4; shot user_done2; fi
+  waitfor "installation summary" 60 hub_user || fail "did not return to the summary after User Creation"; }
+if has "user creation"; then
+  make_user
+  if ! has "administrator"; then   # not an admin yet: tick "Add administrative privileges" (its label toggles it)
+    echo "user is not an administrator yet: ticking the box"
+    click "user creation" || click "creation"; waitfor "create user|full name" 60 user2 || fail "User Creation did not reopen"
+    click "administrative" || fail "no administrative-privileges box"; sleep 1; shot admin_ticked
+    click "done" || key alt-d; sleep 4; shot admin_done1; has "installation summary" || { click "done" || key alt-d; sleep 4; }
+    waitfor "installation summary" 60 hub_admin || fail "did not return to the summary after ticking administrator"
+  fi
+  has "administrator" || fail "the summary does not say an administrator account will be created"
+  cp "$LAST" "$OUT/summary_user.png"
+  echo "User Creation done by typing: $(grep -Eo '[a-z]* ?[a-z]+ will be created' "${LAST%.png}.txt" | head -1)"
+else
+  echo "::warning::no User Creation on the summary (a user was already set?)"
+fi
 
 # 3. Installation Destination > (disk ticked) > Automatic > Done
 click "installation destination" || click "destination" || fail "could not find Installation Destination on the summary"

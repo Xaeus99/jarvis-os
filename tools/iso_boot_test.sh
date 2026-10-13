@@ -2,6 +2,8 @@
 # Boots the real (interactive) installer ISO under KVM/OVMF next to a blank disk and screenshots it up to the
 # installer's first screen. Nothing is installed: the VM is switched off once the installer is up.
 #   iso_boot_test.sh ISO OUTDIR   -> OUTDIR/*.png, OUTDIR/serial.log, OUTDIR/verdict.txt; exit 0 = installer screen seen
+#   BOOT_MEDIA=cd (default: the ISO as a DVD) | usb (the file is a USB stick's raw contents, plugged in over USB 3)
+#   FIRMWARE=uefi (default, OVMF) | bios (legacy BIOS / CSM, SeaBIOS)
 # "Installer screen seen" = OCR (tesseract) finds the installer's own words (language / welcome / installation
 # summary / keyboard) on a screenshot taken after the boot menu. One retry (fresh VM) if the first boot stalls,
 # because the installer's own early boot has hung once before at "Switch Root" (install-test run 38025874881).
@@ -22,19 +24,32 @@ guard() { # the dual-boot safety page: Windows found and locked
   tesseract "$OUT/$1.png" - 2>/dev/null | tr '[:upper:]' '[:lower:]' > "$OUT/$1.txt"
   grep -q "safety check" "$OUT/$1.txt" && grep -q "windows found" "$OUT/$1.txt" && grep -q "locked" "$OUT/$1.txt"; }
 WINDISK=${WINDISK:-/tmp/iso-windows.raw}
+BOOT_MEDIA=${BOOT_MEDIA:-cd}; FIRMWARE=${FIRMWARE:-uefi}
+case $FIRMWARE in
+  uefi) FW=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd -drive if=pflash,format=raw,file=/tmp/iso-vars.fd) ;;
+  bios) FW=() ;;                                       # QEMU's default firmware is SeaBIOS (legacy BIOS)
+  *) echo "FIRMWARE must be uefi or bios"; exit 2 ;;
+esac
+case $BOOT_MEDIA in
+  cd)  MEDIA=(-drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1) ;;
+  # a USB stick: the raw bytes, on a USB 3 port, as a removable USB mass-storage disk (snapshot: the test never writes it)
+  usb) MEDIA=(-device qemu-xhci,id=xhci -drive file="$ISO",if=none,format=raw,id=stick,snapshot=on
+              -device usb-storage,bus=xhci.0,drive=stick,removable=on,bootindex=1) ;;
+  *) echo "BOOT_MEDIA must be cd or usb"; exit 2 ;;
+esac
+echo "booting the installer from: $BOOT_MEDIA, firmware: $FIRMWARE"
 attempt() { # attempt N
   local n=$1 t=0
   rm -f /tmp/iso-vars.fd; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/iso-vars.fd
   [ -f "$WINDISK" ] || bash "$(dirname "$0")/install_test.sh" prepare "$WINDISK" >/dev/null
-  qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-    -drive if=pflash,format=raw,file=/tmp/iso-vars.fd \
+  qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 "${FW[@]}" \
     -drive file="$WINDISK",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
-    -drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1 \
+    "${MEDIA[@]}" \
     -device virtio-vga -display none -nic user,model=virtio-net-pci -usb -device usb-tablet \
     -monitor unix:$MON,server,nowait -serial file:"$OUT/serial_$n.log" &
   QPID=$!; sleep 4
-  shot "a${n}_00_firmware"; sleep 10; shot "a${n}_01_boot_menu"
+  shot "a${n}_00_firmware"; sleep 10; shot "a${n}_01_boot_menu"; cp "$OUT/a${n}_01_boot_menu.png" "$OUT/boot_menu.png" 2>/dev/null
+  tesseract "$OUT/a${n}_01_boot_menu.png" - 2>/dev/null > "$OUT/boot_menu.txt"; echo "boot menu reads: $(tr -s '\n' ' ' < "$OUT/boot_menu.txt" | head -c 300)"
   mon "sendkey up"; sleep 0.5; mon "sendkey ret"      # "Install ..." (skips the media check, as a person would)
   while alive && [ $t -lt 720 ]; do
     sleep 20; t=$((t+20)); s=$(printf 'a%d_%02d_%04ds' "$n" $((t/20+1)) $t); shot "$s"
@@ -48,7 +63,7 @@ attempt() { # attempt N
       seen "a${n}_next_screen" && cp "$OUT/a${n}_next_screen.png" "$OUT/installer_summary.png"
       mon quit; sleep 2
       if [ -f "$OUT/dualboot_screen.png" ]; then g="the dual-boot safety page found Windows and locked it"; else g="NO dual-boot safety page seen"; fi
-      echo "PASS: the installer came up after ${t}s (attempt $n); $g" > "$OUT/verdict.txt"; return 0
+      echo "PASS ($BOOT_MEDIA, $FIRMWARE): the installer came up after ${t}s (attempt $n); $g" > "$OUT/verdict.txt"; return 0
     fi
   done
   mon quit; sleep 2; alive && kill "$QPID"; return 1

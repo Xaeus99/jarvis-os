@@ -106,3 +106,24 @@ for f in /etc/xdg/autostart/*.desktop /usr/etc/xdg/autostart/*.desktop /etc/skel
     echo "welcome app autostart off: $f"; sed -i '/^Hidden=/d' "$f"; echo 'Hidden=true' >> "$f"
   fi
 done
+
+# 10. Boot splash: the JARVIS Plymouth theme (usr/share/plymouth/themes/jarvis, art from tools/make_plymouth_art.py,
+#     two-step module like Fedora's own spinner) as the default, baked into the initramfs, because the splash is
+#     drawn from the initramfs before the system is mounted. The initramfs is rebuilt the way the base builds it
+#     (no-hostonly, ostree); the build fails if the theme isn't inside it. A disk-password prompt still works
+#     (entry/bullet/lock pictures); Esc during boot still shows the text messages.
+PLY=/usr/share/plymouth/themes/jarvis
+ls /usr/lib64/plymouth/two-step.so >/dev/null 2>&1 || dnf5 -y install plymouth-plugin-two-step
+for f in capslock.png keyboard.png keymap-render.png; do      # optional indicator pictures from the stock spinner
+  [ -f "$PLY/$f" ] || [ ! -f "/usr/share/plymouth/themes/spinner/$f" ] || cp "/usr/share/plymouth/themes/spinner/$f" "$PLY/$f"
+done
+echo "previous splash: $(plymouth-set-default-theme 2>/dev/null || grep -h ^Theme= /usr/share/plymouth/plymouthd.defaults 2>/dev/null || echo unknown)"
+mkdir -p /etc/plymouth
+printf '[Daemon]\nTheme=jarvis\nShowDelay=0\nDeviceTimeout=8\n' > /etc/plymouth/plymouthd.conf
+command -v plymouth-set-default-theme >/dev/null && echo "splash now: $(plymouth-set-default-theme)"
+KVERS=$(ls /usr/lib/modules)
+[ "$(echo "$KVERS" | wc -w)" = 1 ] || { echo "expected one kernel, found: $KVERS"; exit 1; }
+dracut --no-hostonly --kver "$KVERS" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVERS/initramfs.img"
+chmod 0600 "/usr/lib/modules/$KVERS/initramfs.img"
+lsinitrd "/usr/lib/modules/$KVERS/initramfs.img" | grep -E 'plymouth/themes/jarvis/(jarvis.plymouth|watermark.png)|two-step.so' | tee /tmp/ply.txt
+[ "$(wc -l < /tmp/ply.txt)" -ge 3 ] || { echo "JARVIS splash missing from the initramfs"; exit 1; }

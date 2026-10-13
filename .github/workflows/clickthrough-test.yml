@@ -3,12 +3,13 @@
 # dual-boot safety page in parallel: ENTER, nothing typed (continues by itself), and TOUCH WINDOWS + YES.
 # Each: Automatic > Done > Begin Installation, then Windows must be byte-identical (partitions, table entries,
 # Windows Boot Manager files), the new system must boot, and the guard's log must say what was chosen.
-# The only change to the released kickstart: a test user account, so the User Creation screen is already done.
+# The released kickstart is used unchanged: the User Creation screen is filled in by typing (full name, user name,
+# administrator, password), and after the first boot the test logs in as that user and checks the login happened.
 # The ISO gets the same JARVIS installer look as the released one (tools/release/brand_iso.sh).
 name: clickthrough-test
 on:
   workflow_dispatch: {}
-  push: { branches: [main], paths: [".github/workflows/clickthrough-test.yml", "tools/clickthrough_test.sh", "tools/vmctl.py", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/release/brand_iso.sh", "image/installer/art/**"] }
+  push: { branches: [main], paths: [".github/workflows/clickthrough-test.yml", "tools/clickthrough_test.sh", "tools/vmctl.py", "tools/install_test.sh", "tools/release/theme_grub_cfg.py", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/release/brand_iso.sh", "image/installer/art/**"] }
 permissions: { contents: read, packages: read }
 jobs:
   click:
@@ -24,18 +25,11 @@ jobs:
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr ntfs-3g gdisk dosfstools mtools btrfs-progs parted
           chmod +x tools/*.sh; python3 tools/sync_installer_guard.py --check
-      - name: Build the installer ISO (released kickstart + a test user)
+      - name: Build the installer ISO (the released kickstart, unchanged)
         run: |
           . image/disk_config/release.env
           CHANNEL="${IMAGE_REF%%@*}"; IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
-          python3 - <<'EOF'
-          import re
-          t = open("image/disk_config/iso.toml").read()
-          add = "user --name=jarvis --password=jarvis-install-test --plaintext --groups=wheel\nrootpw --lock\n"
-          assert "network --hostname=jarvis-os\n" in t
-          open("/tmp/clickthrough.toml", "w").write(t.replace("network --hostname=jarvis-os\n", "network --hostname=jarvis-os\n" + add, 1))
-          EOF
-          diff image/disk_config/iso.toml /tmp/clickthrough.toml || true
+          cp image/disk_config/iso.toml /tmp/clickthrough.toml
           mkdir -p output
           sudo podman pull "$IMAGE:$IMAGE_REF"
           [ "$IMAGE:$IMAGE_REF" = "$IMAGE:$CHANNEL" ] || sudo podman tag "$IMAGE:$IMAGE_REF" "$IMAGE:$CHANNEL"
@@ -63,7 +57,7 @@ jobs:
       - name: Verdict
         run: |
           tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_boot.txt
-          tools/install_test.sh collect "$DISK" shots
+          LOGIN_USER=owner tools/install_test.sh collect "$DISK" shots
           ok=1; M=${{ matrix.mode }}
           for f in after_install after_boot; do
             if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_$f.txt); then
@@ -82,6 +76,11 @@ jobs:
           else echo "::error::guard log missing or not as expected for $M (want $want)"; ok=0; fi
           if [ $M = unlock ] && [ "$(grep -c '^unlocked /dev/' "$G")" -lt 3 ]; then echo "::error::TOUCH WINDOWS + YES did not unlock the 3 partitions"; ok=0; fi
           ls shots/boot1_c*desktop*.png >/dev/null 2>&1 && echo "new system booted (desktop screenshots: $(ls shots/boot1_c*desktop*.png | wc -l))"
+          # the account typed into User Creation: exists, is an administrator, and was logged into on the first boot
+          if grep -q "^user owner exists" shots/login_evidence.txt 2>/dev/null && grep -q "^admin owner yes" shots/login_evidence.txt \
+             && grep -q "^logged-in owner yes" shots/login_evidence.txt; then
+            echo "PASS (account): $(tr '\n' ';' < shots/login_evidence.txt)"
+          else echo "::error::the typed-in account is missing, not an administrator, or was never logged into"; cat shots/login_evidence.txt 2>/dev/null; ok=0; fi
           echo "### clickthrough-test ($M): $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
           cat shots/verdict.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           [ $ok = 1 ]
