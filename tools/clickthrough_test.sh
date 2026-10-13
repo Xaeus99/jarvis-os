@@ -90,10 +90,11 @@ cp "$LAST" "$OUT/summary_ready.png"
 # 4. Begin Installation, wait for Complete!
 sleep 5; shot before_begin
 click "begin installation" || click "begin" || key alt-b
-waitfor "setting up|configuring|running|installing|downloading|deploying|reboot system" 120 started || fail "Begin Installation did not start the install"
+waitfor "installation progress|deployment|setting up|configuring|running|installing|downloading|deploying" 120 started || fail "Begin Installation did not start the install"
 t=0; ok=0
 while alive && [ $t -lt 2700 ]; do sleep 30; t=$((t+30)); shot "install_${t}s"
-  if has "complete!|successfully installed|reboot system"; then ok=1; break; fi
+  # (not "reboot system": that button is on the progress page from the start, greyed out)
+  if has "complete!|successfully installed"; then ok=1; break; fi
   has "unknown error|an error occurred|traceback" && fail "installer error after ${t}s"; done
 [ $ok = 1 ] || fail "no Complete! within 45 min"
 cp "$LAST" "$OUT/install_complete.png"
