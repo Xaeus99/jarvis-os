@@ -59,3 +59,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: standalone-test, path: shots/ }
+# re-run on beta = D11 (sha256:d3afcec051e0..., NVIDIA modesetting), Oct 14

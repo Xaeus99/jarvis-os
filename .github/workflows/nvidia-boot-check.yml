@@ -6,7 +6,7 @@
 name: nvidia-boot-check
 on:
   workflow_dispatch: { inputs: { image: { default: "stable" } } }
-  push: { branches: [main], paths: [".github/workflows/nvidia-boot-check.yml", "tools/nvidia_boot_check.sh"] }
+  push: { branches: [main], paths: [".github/workflows/nvidia-boot-check.yml", "tools/nvidia_boot_check.sh", "image/disk_config/release.env"] }
 permissions: { contents: read, packages: read }
 jobs:
   check:
@@ -17,7 +17,7 @@ jobs:
       - uses: ublue-os/remove-unwanted-software@v9
       - name: Read both images
         run: |
-          T="${{ inputs.image }}"; T=${T:-stable}
+          T="${{ inputs.image }}"; if [ -z "$T" ]; then . image/disk_config/release.env; T="$IMAGE_REF"; fi   # push: the image release.env names (tag or tag@digest)
           IMG=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:$T
           BASE=$(sed -n 's/^ARG BASE_IMAGE=//p' image/Containerfile)
           mkdir -p out

@@ -26,7 +26,7 @@ if errorlevel 1 (
 echo.
 echo   OK: %ISO% is complete and matches the published checksum.
 echo   You can delete the .part files now.
-echo   Next: write it to a USB stick with Fedora Media Writer ("Select .iso file") or Rufus (DD mode).
+echo   Next: write it to a USB stick with Fedora Media Writer ("Select .iso file") or Rufus (DD mode is safest, its default ISO mode works too).
 goto :end
 
 :get

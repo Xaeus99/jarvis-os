@@ -50,9 +50,10 @@ If Shrink offers much less than you asked, run Disk Cleanup, empty the Recycle B
 2. Write the `.iso` to the stick with **one** of these:
    - **Fedora Media Writer** (easiest): pick *Select .iso file*, choose the JARVIS file, pick your stick, *Write*.
    - **Rufus**: pick your stick, click *SELECT* and choose the JARVIS `.iso`, leave the rest as it is, click *START*.
-     When Rufus asks **"ISOHybrid image detected"**, choose **"Write in DD Image mode"**, then OK.
-     (DD mode copies the stick exactly like our tests do. Rufus's other choice, ISO Image mode, was also
-     tested and boots, see *USB stick notes* at the end, but DD mode is the safest pick.)
+     When Rufus asks **"ISOHybrid image detected"**, either choice works:
+     **"Write in DD Image mode"** is the safest (it copies the stick exactly, like Fedora Media Writer), and
+     Rufus's default **"Write in ISO Image mode"** was tested too: it booted and installed fine. If you're unsure,
+     pick DD mode, then OK.
 3. It takes 5-15 minutes. Windows may say the stick "needs to be formatted" afterwards: click **Cancel**. That's
    normal, Windows just can't read it.
 
@@ -124,5 +125,8 @@ Removing JARVIS OS later is possible too (Windows can delete its partitions and 
 All in virtual machines with a fake Windows disk, not on your real PC:
 - The stick written byte for byte (Fedora Media Writer, Rufus **DD mode**): starts on UEFI and old BIOS PCs,
   reaches the safety page and the installer.
-- Rufus's default **ISO Image mode** (FAT32 stick, Rufus renames it and fixes the boot menu to match): see the
-  rufus-iso-mode-test results in the repo's Actions tab and docs/RELEASE_NOTES_OCT31.md.
+- Rufus's default **ISO Image mode** (Rufus copies the files onto a FAT32 stick, renames it CONTAINER-I and fixes
+  the boot menu to match): built the way Rufus 4.15 does it, it started on UEFI, reached the safety page (Windows
+  found and locked) and the installer, and a full click-through install from that stick worked, with Windows
+  byte-identical afterwards (test run 38652813253). Also boots from a GPT-partitioned FAT32 stick.
+  This copies what Rufus does; real Rufus on a real stick wasn't run, so DD mode stays the safest pick.

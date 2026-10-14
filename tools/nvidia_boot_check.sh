@@ -31,6 +31,7 @@ echo "simpledrm/efifb in initramfs: $(grep -Eo "(simpledrm|simplefb|efifb)[a-z_]
 echo "nvidia firmware (GSP) in initramfs: $(grep -c "firmware/nvidia/" /tmp/l.txt) files"
 echo "plymouth in initramfs: $(grep -Eo "plymouth/themes/[a-z-]+/[a-z-]+\.plymouth" /tmp/l.txt | sort -u | tr "\n" " ")"
 lsinitrd -f etc/modprobe.d/nvidia-modeset.conf $I 2>/dev/null | sed "s/^/initramfs modprobe: /"
+lsinitrd -f usr/lib/modprobe.d/90-jarvis-nvidia-kms.conf $I 2>/dev/null | grep -v "^#" | sed "s/^/initramfs modprobe: /"
 lsinitrd $I 2>/dev/null | grep -E "etc/modprobe.d/" | sed "s/^.* etc/initramfs has etc/"
 echo "## plymouth"; cat /etc/plymouth/plymouthd.conf 2>/dev/null; grep -h "^Theme\|^DeviceTimeout\|^ShowDelay" /usr/share/plymouth/plymouthd.defaults 2>/dev/null | sed "s/^/defaults: /"
 echo "## display manager"; systemctl get-default 2>/dev/null; ls /etc/systemd/system/display-manager.service 2>/dev/null && readlink -f /etc/systemd/system/display-manager.service
