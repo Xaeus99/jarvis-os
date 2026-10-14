@@ -60,3 +60,10 @@ The full step-by-step is in `docs/INSTALL_DAY.md`.
 - Boot menu > **Windows** always gets you back to Windows.
 - Boot menu > **previous (rollback)** undoes the last update.
 - Say "take back control" or press **Meta+Shift+Esc** to stop anything JARVIS is doing.
+
+## Also new (added Oct 14)
+
+- **JARVIS boot splash.** When the PC starts, you see the JARVIS arc-reactor logo and a spinning purple ring instead of the stock logo.
+- **JARVIS boot menu on the USB stick.** The installer stick opens on a JARVIS-themed menu. Pick **Install JARVIS OS** and press Enter.
+- **Tested as a real USB stick.** The installer was copied byte for byte onto a (virtual) 16 GB stick, the way Rufus (DD mode) and Fedora Media Writer write it, and booted in both UEFI and older BIOS mode.
+- **Your account, your way.** The installer's "User Creation" screen is where you type your name, user name and password. Leave "administrative privileges" ticked. Our tests now fill this screen in by hand, like you will, and then log in.
