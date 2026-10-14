@@ -1,0 +1,4 @@
+# NVIDIA (his RTX 5060): turn on the driver's kernel modesetting and framebuffer from the very first moment,
+# so the JARVIS splash and the login screen come up on the NVIDIA card. Harmless on PCs without NVIDIA.
+kargs = ["nvidia-drm.modeset=1", "nvidia-drm.fbdev=1"]
+match-architectures = ["x86_64"]

@@ -127,3 +127,6 @@ dracut --no-hostonly --kver "$KVERS" --reproducible --zstd -v --add ostree -f "/
 chmod 0600 "/usr/lib/modules/$KVERS/initramfs.img"
 lsinitrd "/usr/lib/modules/$KVERS/initramfs.img" | grep -E 'plymouth/themes/jarvis/(jarvis.plymouth|watermark.png)|two-step.so' | tee /tmp/ply.txt
 [ "$(wc -l < /tmp/ply.txt)" -ge 3 ] || { echo "JARVIS splash missing from the initramfs"; exit 1; }
+lsinitrd -f usr/lib/modprobe.d/90-jarvis-nvidia-kms.conf "/usr/lib/modules/$KVERS/initramfs.img" | grep -q "nvidia-drm modeset=1" \
+  || { echo "NVIDIA modeset option missing from the initramfs"; exit 1; }
+echo "NVIDIA modeset option is in the initramfs"
