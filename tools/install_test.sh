@@ -106,8 +106,11 @@ collect)
       sudo cp "$f" "$OUT/$(basename "$(dirname "$f")")__$(basename "$f")"; done
     if [ -n "${LOGIN_USER:-}" ]; then   # the account typed in during the click-through install, and its first login
       E="$OUT/login_evidence.txt"
-      pw=$(sudo find $M -maxdepth 9 -path '*/ostree/deploy/*/deploy/*/etc/passwd' 2>/dev/null | head -1)
-      if [ -n "$pw" ] && sudo grep -q "^$LOGIN_USER:" "$pw"; then
+      # the deployment's own /etc/passwd (not the image default in usr/etc): the one that has the user
+      pw=""; for f in $(sudo find $M -maxdepth 9 -path '*/ostree/deploy/*/etc/passwd' -not -path '*/usr/etc/*' 2>/dev/null); do
+        sudo grep -q "^$LOGIN_USER:" "$f" && { pw=$f; break; }; done
+      echo "passwd checked: ${pw:-none had $LOGIN_USER}"
+      if [ -n "$pw" ]; then
         echo "user $LOGIN_USER exists ($(sudo grep "^$LOGIN_USER:" "$pw" | cut -d: -f5,7))" >> "$E"
         sudo grep -Eq "^wheel:[^:]*:[0-9]*:(.*,)?$LOGIN_USER(,|$)" "$(dirname "$pw")/group" && echo "admin $LOGIN_USER yes (wheel)" >> "$E"
       fi
