@@ -3,7 +3,7 @@
 # separate manual job after the beta has booted on a test machine.
 name: build-jarvis-os
 on:
-  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md", ".github/workflows/install-test.yml", ".github/workflows/boot-test.yml", ".github/workflows/build-iso.yml", "tools/install_test.sh", "tools/boot_test.sh", "tools/iso_boot_test.sh", "tools/standalone_test.sh", ".github/workflows/standalone-test.yml", ".github/workflows/promote-stable.yml", "tools/release/**", "image/disk_config/**", "image/installer/**", "tools/sync_installer_guard.py", "tools/test_dualboot_guard.sh", "tools/make_installer_art.py", "tools/clickthrough_test.sh", "tools/vmctl.py", ".github/workflows/clickthrough-test.yml"] }
+  push: { branches: [main], paths-ignore: ["docs/**", "**/*.md", ".github/workflows/install-test.yml", ".github/workflows/boot-test.yml", ".github/workflows/build-iso.yml", "tools/install_test.sh", "tools/boot_test.sh", "tools/iso_boot_test.sh", "tools/standalone_test.sh", ".github/workflows/standalone-test.yml", ".github/workflows/promote-stable.yml", "tools/release/**", "image/disk_config/**", "image/installer/**", "tools/sync_installer_guard.py", "tools/test_dualboot_guard.sh", "tools/make_installer_art.py", "tools/clickthrough_test.sh", "tools/vmctl.py", ".github/workflows/clickthrough-test.yml", ".github/workflows/rufus-iso-mode-test.yml", "tools/rufus_iso_mode_stick.sh", ".github/workflows/nvidia-boot-check.yml", "tools/nvidia_boot_check.sh"] }
   schedule: [{ cron: "15 6 * * *" }]     # daily, after Bazzite's own nightly
   workflow_dispatch:
 permissions: { contents: read, packages: write, id-token: write, actions: read }

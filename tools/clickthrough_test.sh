@@ -30,13 +30,21 @@ waitfor() { # waitfor REGEX SECONDS NAME -> polls the screen every 10 s
   local t=0; while alive && [ $t -lt $2 ]; do sleep 10; t=$((t+10)); shot "$3_${t}s"; has "$1" && return 0
     has "unknown error|an error occurred|traceback" && fail "installer error on screen ($(basename "$LAST"))"; done; return 1; }
 
+# BOOT_MEDIA=cd (default: the ISO as a DVD) | usb (ISO is a USB stick's raw contents, e.g. a Rufus ISO-mode stick from
+# tools/rufus_iso_mode_stick.sh, plugged in over USB 3 as removable mass storage; snapshot: the test never writes it)
+case ${BOOT_MEDIA:-cd} in
+  cd)  MEDIA=(-drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1) ;;
+  usb) MEDIA=(-device qemu-xhci,id=xhci -drive file="$ISO",if=none,format=raw,id=stick,snapshot=on
+              -device usb-storage,bus=xhci.0,drive=stick,removable=on,bootindex=1) ;;
+  *) echo "BOOT_MEDIA must be cd or usb"; exit 2 ;;
+esac
 startvm() { # startvm N: fresh VM (fresh firmware variables) booting the ISO's "Install" entry
   rm -f /tmp/vars.fd $MON $QMP; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
   qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,file=/tmp/vars.fd \
     -drive file="$DISK",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
-    -drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1 \
+    "${MEDIA[@]}" \
     -device virtio-vga -display none -nic user,model=virtio-net-pci -usb -device usb-tablet \
     -monitor unix:$MON,server,nowait -qmp unix:$QMP,server,nowait -serial file:"$OUT/serial_$1.log" -no-reboot &
   QPID=$!; sleep 14; shot "a$1_boot_menu"

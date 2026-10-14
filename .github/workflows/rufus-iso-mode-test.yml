@@ -1,0 +1,93 @@
+# Rufus "ISO Image mode" test. Rufus's DEFAULT for our hybrid ISO is not a byte-for-byte copy (that is "DD mode",
+# tested in build-iso): it formats the stick FAT32, copies the ISO's files onto it, renames the stick to an
+# 11-character FAT name ("CONTAINER-I") and patches the boot menu to that name. tools/rufus_iso_mode_stick.sh builds
+# such a stick from the RELEASED ISO, the way Rufus 4.15 does (read from its source), and this workflow boots it in
+# a KVM VM under UEFI (his PC is UEFI) next to a Windows-shaped disk, to the dual-boot safety page and the installer.
+#   fat32-mbr     Rufus's default (MBR, "BIOS or UEFI", FAT32, label patch) + a FULL click-through install from the
+#                 stick (the system is copied from the stick's files) + Windows byte-identical + first boot + login
+#   fat32-gpt     the same stick with GPT ("UEFI (non CSM)") - boot to the installer
+#   ntfs          if NTFS is picked: NTFS + Rufus's own UEFI:NTFS partition (uefi-ntfs.img) - boot to the installer
+#   fat32-nopatch FAT32 WITHOUT the label patch (another file-copy tool) - expected to fail; recorded, not fatal
+name: rufus-iso-mode-test
+on:
+  workflow_dispatch: { inputs: { tag: { description: "release tag (default: latest)", default: "" } } }
+  push: { branches: [main], paths: [".github/workflows/rufus-iso-mode-test.yml", "tools/rufus_iso_mode_stick.sh"] }
+permissions: { contents: read }
+jobs:
+  stick:
+    strategy: { fail-fast: false, matrix: { variant: [fat32-mbr, fat32-gpt, ntfs, fat32-nopatch] } }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools (KVM, QEMU, OVMF, OCR, NTFS, FAT, xorriso)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr ntfs-3g gdisk dosfstools mtools btrfs-progs parted xorriso
+          chmod +x tools/*.sh; df -h / /mnt
+      - name: Download the released ISO (anonymous, like a person would) and check every part
+        run: |
+          sudo install -d -o "$USER" /mnt/r; cd /mnt/r
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG=$(curl -fsSL https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'); fi
+          B=https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG
+          curl -fsSL -o SHA256SUMS "$B/SHA256SUMS"; cat SHA256SUMS
+          ISO=$(grep -o 'jarvis-os-[^ ]*-x86_64\.iso$' SHA256SUMS | head -1)
+          for p in $(grep -o "$ISO\.part[0-9]*" SHA256SUMS | sort -V); do
+            got=$(curl -fsSL "$B/$p" | tee -a "$ISO" | sha256sum | cut -d' ' -f1)
+            grep -q "^$got  $p$" SHA256SUMS && echo "$p OK" || { echo "::error::$p checksum mismatch"; exit 1; }
+          done
+          grep -q "^$(sha256sum "$ISO" | cut -d' ' -f1)  $ISO$" SHA256SUMS && echo "joined $ISO OK" || { echo "::error::joined ISO mismatch"; exit 1; }
+          echo "ISO=/mnt/r/$ISO" >> "$GITHUB_ENV"; echo "TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Make the stick the way Rufus ISO mode does (${{ matrix.variant }})
+        run: |
+          mkdir -p shots
+          bash tools/rufus_iso_mode_stick.sh "$ISO" /mnt/r/stick.raw ${{ matrix.variant }} 2>&1 | grep -v udevd | tee shots/stick.txt
+          rm -f "$ISO"; df -h /mnt
+      - name: Boot the stick (UEFI) to the dual-boot safety page and the installer
+        id: boot
+        continue-on-error: ${{ matrix.variant == 'fat32-nopatch' }}
+        run: |
+          sudo install -d -o "$USER" /mnt/win && export WINDISK=/mnt/win/windows.raw
+          BOOT_MEDIA=usb FIRMWARE=uefi bash tools/iso_boot_test.sh /mnt/r/stick.raw shots/boot
+      - name: Dummy Windows disk for the full install
+        if: matrix.variant == 'fat32-mbr'
+        run: |
+          sudo install -d -o "$USER" /mnt/work; D=/mnt/work/disk.raw; echo "DISK=$D" >> "$GITHUB_ENV"
+          tools/install_test.sh prepare "$D"
+          tools/install_test.sh fingerprint "$D" shots/fingerprint_before.txt
+      - name: Click through the whole install FROM THE RUFUS STICK (Enter on the safety page, typed-in account)
+        if: matrix.variant == 'fat32-mbr'
+        run: BOOT_MEDIA=usb tools/clickthrough_test.sh enter /mnt/r/stick.raw "$DISK" shots/install
+      - name: Windows untouched, first boot, login
+        if: matrix.variant == 'fat32-mbr'
+        run: |
+          S=shots/install
+          tools/install_test.sh fingerprint "$DISK" $S/fingerprint_after_install.txt
+          tools/install_test.sh boot "$DISK" $S boot1
+          tools/install_test.sh fingerprint "$DISK" $S/fingerprint_after_boot.txt
+          LOGIN_USER=owner tools/install_test.sh collect "$DISK" $S
+          ok=1
+          for f in after_install after_boot; do
+            if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' $S/fingerprint_$f.txt); then
+              echo "PASS ($f): Windows partitions, their table entries and Windows Boot Manager files are byte-identical"
+            else echo "::error::Windows changed ($f)"; ok=0; fi
+          done
+          G=$(ls $S/*jarvis-dualboot-guard.log 2>/dev/null | head -1); tail -6 "$G" 2>/dev/null
+          if [ -n "$G" ] && grep -Eq "choice=locked.*how=enter" "$G" && grep -q "verdict: Windows partition entries unchanged" "$G"; then
+            echo "PASS (guard): Windows locked, entries unchanged"; else echo "::error::guard log missing or not as expected"; ok=0; fi
+          if grep -q "^user owner exists" $S/login_evidence.txt 2>/dev/null && grep -q "^logged-in owner yes" $S/login_evidence.txt; then
+            echo "PASS (account): $(tr '\n' ';' < $S/login_evidence.txt)"; else echo "::error::typed-in account missing or never logged into"; ok=0; fi
+          [ $ok = 1 ] && echo "PASS: full install from a Rufus ISO-mode stick" > $S/install_verdict.txt
+          [ $ok = 1 ]
+      - name: Summary
+        if: always()
+        run: |
+          { echo "### Rufus ISO mode: ${{ matrix.variant }} ($TAG)"
+            grep -E "label|Patched|ISO tree|stick files" shots/stick.txt
+            echo "- boot to safety page + installer: ${{ steps.boot.outcome }}"
+            cat shots/boot/verdict.txt shots/install/verdict.txt shots/install/install_verdict.txt 2>/dev/null | sed 's/^/- /'; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "rufus-${{ matrix.variant }}", path: shots/ }

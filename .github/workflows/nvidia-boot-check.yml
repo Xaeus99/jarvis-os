@@ -1,0 +1,43 @@
+# NVIDIA boot path check (RTX 50-series): reads, from inside the published :stable image and the pinned base, the
+# kernel arguments, the nvidia-drm modeset/fbdev options, whether the NVIDIA driver is inside the initramfs (early KMS),
+# the nouveau blacklist, the driver version / RTX 5060 support and the splash settings, and FAILS if our image lost
+# anything the base had (our build rebuilds the initramfs for the JARVIS splash). Nothing here needs a GPU; what it
+# cannot show (the splash on the real card, Secure Boot key enrollment) is listed in docs/NVIDIA.md.
+name: nvidia-boot-check
+on:
+  workflow_dispatch: { inputs: { image: { default: "stable" } } }
+  push: { branches: [main], paths: [".github/workflows/nvidia-boot-check.yml", "tools/nvidia_boot_check.sh"] }
+permissions: { contents: read, packages: read }
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ublue-os/remove-unwanted-software@v9
+      - name: Read both images
+        run: |
+          T="${{ inputs.image }}"; T=${T:-stable}
+          IMG=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os:$T
+          BASE=$(sed -n 's/^ARG BASE_IMAGE=//p' image/Containerfile)
+          mkdir -p out
+          sudo podman pull -q "$IMG" >/dev/null && bash tools/nvidia_boot_check.sh "$IMG" out/jarvis.txt
+          echo "image digest: $(sudo podman image inspect --format '{{.Digest}}' "$IMG")" >> out/jarvis.txt
+          sudo podman rmi -f "$IMG" >/dev/null
+          sudo podman pull -q "$BASE" >/dev/null && bash tools/nvidia_boot_check.sh "$BASE" out/base.txt
+          echo "===== JARVIS OS ($T)"; cat out/jarvis.txt; echo "===== base"; cat out/base.txt
+      - name: Verdict
+        run: |
+          ok=1; J=out/jarvis.txt; B=out/base.txt
+          mods() { sed -n 's/^nvidia modules in initramfs: //p' "$1"; }
+          echo "base initramfs nvidia: $(mods $B)"; echo "ours initramfs nvidia: $(mods $J)"
+          for m in $(mods $B); do echo " $(mods $J) " | grep -q " $m " || { echo "::error::our initramfs lost $m (the base has it)"; ok=0; }; done
+          if grep -Eq "nvidia-drm.modeset=1|nvidia[-_]drm[^ ]* modeset=1" $J; then echo "PASS: nvidia-drm modeset=1 is set (kernel argument or modprobe option)"; else echo "::error::nvidia-drm modeset=1 not set anywhere"; ok=0; fi
+          if grep -Eq "nouveau" $J; then echo "PASS: nouveau is blacklisted"; else echo "::warning::no nouveau blacklist found"; fi
+          grep -q "plymouth/themes/jarvis/jarvis.plymouth" $J && echo "PASS: JARVIS splash in the initramfs" || { echo "::error::splash missing"; ok=0; }
+          grep -q "^DeviceTimeout=" $J && echo "PASS: splash falls back to the plain screen if no graphics device shows up ($(grep -h '^DeviceTimeout=' $J | head -1))"
+          { echo "### NVIDIA boot path"; echo '```'; cat $J; echo '```'; echo "base: $(mods $B)"; } >> "$GITHUB_STEP_SUMMARY"
+          [ $ok = 1 ]
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: nvidia-boot-check, path: out/ }
