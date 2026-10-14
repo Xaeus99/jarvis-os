@@ -67,3 +67,14 @@ The full step-by-step is in `docs/INSTALL_DAY.md`.
 - **JARVIS boot menu on the USB stick.** The installer stick opens on a JARVIS-themed menu. Pick **Install JARVIS OS** and press Enter.
 - **Tested as a real USB stick.** The installer was copied byte for byte onto a (virtual) 16 GB stick, the way Rufus (DD mode) and Fedora Media Writer write it, and booted in both UEFI and older BIOS mode.
 - **Your account, your way.** The installer's "User Creation" screen is where you type your name, user name and password. Leave "administrative privileges" ticked. Our tests now fill this screen in by hand, like you will, and then log in.
+
+
+## Added Oct 14 (phase 10)
+- **Install-day guide**: [docs/INSTALL_DAY_GUIDE.md](INSTALL_DAY_GUIDE.md), step by step: backup, BitLocker key,
+  making space, writing the USB stick, the boot menu, every installer screen, and getting back to Windows.
+- **USB sticks made with Rufus**: Rufus's default "ISO Image mode" (it copies files onto a FAT32 stick instead of an
+  exact copy) is now tested in a VM too, next to the exact-copy way (Fedora Media Writer / Rufus DD mode).
+  DD mode stays the recommended pick.
+- **NVIDIA check**: a new automatic check reads, from inside each image, that the NVIDIA driver is set up to start
+  early (so the boot splash and login screen use your RTX card from the start) and that nothing the base had is lost.
+  If graphics ever fail, the screen falls back to plain mode instead of staying black.
