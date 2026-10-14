@@ -41,3 +41,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: nvidia-boot-check, path: out/ }
+# first run: phase 10 (Oct 14 2026)

@@ -30,7 +30,7 @@ waitfor() { # waitfor REGEX SECONDS NAME -> polls the screen every 10 s
   local t=0; while alive && [ $t -lt $2 ]; do sleep 10; t=$((t+10)); shot "$3_${t}s"; has "$1" && return 0
     has "unknown error|an error occurred|traceback" && fail "installer error on screen ($(basename "$LAST"))"; done; return 1; }
 
-# BOOT_MEDIA=cd (default: the ISO as a DVD) | usb (ISO is a USB stick's raw contents, e.g. a Rufus ISO-mode stick from
+# BOOT_MEDIA=cd (default, as before: the ISO as a DVD) | usb (ISO is a USB stick's raw contents, e.g. a Rufus ISO-mode stick from
 # tools/rufus_iso_mode_stick.sh, plugged in over USB 3 as removable mass storage; snapshot: the test never writes it)
 case ${BOOT_MEDIA:-cd} in
   cd)  MEDIA=(-drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1) ;;
