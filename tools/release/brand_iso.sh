@@ -38,7 +38,7 @@ xorriso -osirrox on -indev "$ISO" -extract /EFI/BOOT/grub.cfg "$T/efi.cfg" -extr
   -extract /images/efiboot.img "$T/efiboot.img" 2>/dev/null
 chmod u+w "$T"/*.cfg "$T/efiboot.img"
 python3 "$here/tools/release/theme_grub_cfg.py" "$T/efi.cfg" "$T/efi.new"
-python3 "$here/tools/release/theme_grub_cfg.py" "$T/bios.cfg" "$T/bios.new"
+python3 "$here/tools/release/theme_grub_cfg.py" "$T/bios.cfg" "$T/bios.new" --bios
 mtype -i "$T/efiboot.img" ::/EFI/BOOT/grub.cfg > "$T/efiimg.cfg"
 python3 "$here/tools/release/theme_grub_cfg.py" "$T/efiimg.cfg" "$T/efiimg.new"
 mcopy -o -i "$T/efiboot.img" "$T/efiimg.new" ::/EFI/BOOT/grub.cfg
