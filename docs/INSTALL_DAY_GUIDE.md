@@ -109,6 +109,12 @@ after 2 minutes, still locked.)
 **i. The JARVIS menu**: **JARVIS OS** is first, then **Windows Boot Manager**. Pick JARVIS OS. You'll see the
 arc reactor splash, then the login screen. Log in with the password from step e. Done!
 
+**j. If the screen stays black** after the JARVIS menu (no splash and no login screen for 2 minutes): hold the
+power button until the PC turns off, turn it on again, and in the JARVIS menu press the **Down arrow** until the
+**last** entry, **JARVIS OS - safe graphics**, is picked, then **Enter**. It starts with a plain picture (lower
+resolution, no games) but everything else works, so you can text JARVIS/Tab and we fix it together. Normal starts
+stay the same; the entry is just always there at the bottom of the menu.
+
 ## 7. Getting back to Windows
 
 - **Every start**: pick **Windows Boot Manager** in the JARVIS menu (use the arrow keys, then Enter).

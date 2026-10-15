@@ -81,3 +81,11 @@ The full step-by-step is in `docs/INSTALL_DAY.md`.
 - **RTX screen from the first second**: the image now turns on the NVIDIA driver's own screen handling
   (nvidia-drm.modeset=1) at boot, both as a boot setting and inside the early-boot files, instead of trusting the
   driver's default. Only your real card can show it working; the fallback to plain mode stays.
+
+## Added Oct 15 (phase 11)
+- **"JARVIS OS - safe graphics" in the boot menu**: the last entry of the JARVIS menu starts the normal system with
+  basic graphics only (no NVIDIA driver, plain picture), an escape hatch if the screen ever stays black. It is kept
+  up to date after every update and is never picked by itself. The menu now waits at least 3 seconds.
+- **Checked inside an installed system**: after a click-through install, every boot entry carries
+  nvidia-drm.modeset=1 and the NVIDIA driver option file is there (also when installed from a Rufus ISO-mode stick
+  made from the v0.1.20261014 download).
