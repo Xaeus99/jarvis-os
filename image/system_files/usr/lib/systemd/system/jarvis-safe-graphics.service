@@ -1,0 +1,15 @@
+[Unit]
+Description=Boot-menu escape hatch "JARVIS OS - safe graphics" (basic display, for a black screen)
+RequiresMountsFor=/boot /var
+After=local-fs.target
+# stop order is the reverse of start order: our ExecStop runs AFTER ostree has written an update's entries
+Before=ostree-finalize-staged.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/libexec/jarvis-os/safe-graphics-entry --boot
+ExecStop=-/usr/libexec/jarvis-os/safe-graphics-entry
+
+[Install]
+WantedBy=multi-user.target

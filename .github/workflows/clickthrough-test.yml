@@ -51,9 +51,17 @@ jobs:
       - name: Click through the installer (${{ matrix.mode }})
         run: tools/clickthrough_test.sh ${{ matrix.mode }} output/bootiso/install.iso "$DISK" shots
       - name: Windows untouched after install?
-        run: tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_install.txt
+        run: |
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_install.txt
+          tools/install_test.sh collect "$DISK" shots/after_install   # installed boot settings before the first boot
       - name: First boot of the new system
         run: tools/install_test.sh boot "$DISK" shots boot1
+      - name: Second boot, through the boot menu's "safe graphics" entry (when the image has it)
+        run: |
+          tools/install_test.sh collect "$DISK" shots/after_boot1
+          if [ -f shots/after_boot1/boot__custom.cfg ]; then
+            tools/install_test.sh bootsafe "$DISK" shots boot2 || { echo "::error::safe graphics boot failed"; touch shots/bootsafe_failed; }
+          else echo "no safe graphics entry on the installed disk (image without it): skipped"; fi
       - name: Verdict
         run: |
           tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after_boot.txt
@@ -81,7 +89,23 @@ jobs:
              && grep -q "^logged-in owner yes" shots/login_evidence.txt; then
             echo "PASS (account): $(tr '\n' ';' < shots/login_evidence.txt)"
           else echo "::error::the typed-in account is missing, not an administrator, or was never logged into"; cat shots/login_evidence.txt 2>/dev/null; ok=0; fi
+          # installed boot settings: NVIDIA modesetting as a boot setting in every boot entry AND the driver option file
+          B=shots/bootcfg_evidence.txt; cat $B
+          if grep -Eq '^entries-with-modeset: ([1-9][0-9]*) of \1$' $B && grep -q '^modprobe-file: yes' $B && ! grep -q '^modprobe-file: no' $B; then
+            echo "PASS (boot settings): $(grep '^entries-with-modeset' $B), $(grep -m1 '^modprobe-file' $B)"
+          else echo "::error::installed boot settings: nvidia-drm.modeset=1 missing from a boot entry, or the driver option file is missing ($(grep -E '^entries-with|^modprobe-file' $B | tr '\n' ';'))"; ok=0; fi
+          grep '^entries-with-modeset' shots/after_install/bootcfg_evidence.txt | sed 's/^/info, right after install: /'
+          # the "safe graphics" escape hatch (required once the image carries it)
+          if grep -q '^safe-graphics-script: yes' $B; then
+            L=$(ls shots/*jarvis-safe-graphics.log 2>/dev/null | head -1)
+            if grep -q '^custom.cfg-nomodeset: yes' $B && grep -q '^grub.cfg-reads-custom.cfg: yes' $B && [ ! -f shots/bootsafe_failed ] \
+               && [ -n "$L" ] && grep -q 'this boot used the safe graphics entry' "$L" && grep -q 'boot cmdline:.*nomodeset.*module_blacklist=nvidia' "$L"; then
+              echo "PASS (safe graphics): picked from the boot menu, booted with $(grep -o 'nomodeset module_blacklist=[^ ]*' "$L" | tail -1); $(ls shots/boot2_c*desktop*.png 2>/dev/null | wc -l) desktop screenshots"
+            else echo "::error::safe graphics entry missing, not read by GRUB, or its boot did not happen ($(grep -E '^custom|^grub.cfg' $B | tr '\n' ';'))"; cat "$L" 2>/dev/null | tail -5; ok=0; fi
+            grep -q '^custom.cfg' shots/after_install/bootcfg_evidence.txt && echo "info: safe graphics entry already there right after install (before the first boot)" || echo "info: safe graphics entry NOT there right after install (written on the first boot)"
+          else echo "info: this image has no safe graphics entry"; fi
           echo "### clickthrough-test ($M): $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
+          cat $B >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           cat shots/verdict.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           [ $ok = 1 ]
       - uses: actions/upload-artifact@v4

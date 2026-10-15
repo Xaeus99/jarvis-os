@@ -44,7 +44,7 @@ EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
 systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-ollama.service jarvis-ai-setup.service
-systemctl enable jarvis-grub-theme.service jarvis-boot-names.service
+systemctl enable jarvis-grub-theme.service jarvis-boot-names.service jarvis-safe-graphics.service
 
 # 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);
 #     the wallpaper is set per user by usr/share/plasma/shells/.../updates/jarvis-os-wallpaper.js

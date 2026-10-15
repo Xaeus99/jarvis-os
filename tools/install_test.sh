@@ -6,7 +6,11 @@
 #   install_test.sh fingerprint DISK.raw OUT.txt -> sha256 of every Windows partition (raw bytes) + Windows boot files
 #   install_test.sh install DISK.raw ISO OUTDIR  -> boots the ISO under OVMF, unattended install, screenshots
 #   install_test.sh boot DISK.raw OUTDIR TAG     -> boots the installed disk, screenshots GRUB + login + desktop
-#   install_test.sh collect DISK.raw OUTDIR      -> copies the in-VM report and installer logs off the disk
+#   install_test.sh bootsafe DISK.raw OUTDIR TAG -> boots the installed disk through the boot menu's LAST entry
+#                                                ("JARVIS OS - safe graphics"), logs in, screenshots
+#   install_test.sh collect DISK.raw OUTDIR      -> copies the in-VM report and installer logs off the disk, and the
+#                                                installed boot settings (bootcfg_evidence.txt: boot entries' kernel
+#                                                options, the NVIDIA driver option file, the safe graphics entry)
 set -u
 cmd=$1; shift
 MON=/tmp/qmon.sock
@@ -97,13 +101,73 @@ boot)
   mon "sendkey ret"; sleep 2; typekeys "jarvis-install-test"; mon "sendkey ret"
   for t in 1 2 3 4 5 6; do sleep 20; shot "${TAG}_c$(printf '%02d' $t)_desktop_$((t*20))s"; done
   sleep 30; mon system_powerdown; for i in $(seq 1 60); do alive || break; sleep 2; done; alive && mon quit; sleep 2 ;;
+bootsafe)
+  D=$1; OUT=$2; TAG=$3; mkdir -p "$OUT"
+  qemu "$D" -serial file:"$OUT/serial_$TAG.log"
+  # Down keys stop GRUB's countdown (they do nothing in the firmware before it); read the screen until the menu
+  # with the safe graphics entry shows, then End (the last entry) and Enter, the way a person would pick it.
+  seen=0
+  for i in $(seq 1 50); do
+    mon "sendkey down"; sleep 0.2; mon "sendkey down"; sleep 0.2
+    mon "screendump /tmp/s.ppm"; sleep 0.3
+    convert /tmp/s.ppm "$OUT/${TAG}_menu_wait.png" 2>/dev/null || continue
+    convert "$OUT/${TAG}_menu_wait.png" -resize 200% -colorspace Gray /tmp/s_big.png 2>/dev/null
+    tesseract /tmp/s_big.png - 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -s ' \n' ' ' > /tmp/s_ocr.txt
+    if grep -q "safe graph" /tmp/s_ocr.txt; then seen=1; break; fi
+    grep -q "jarvis" /tmp/s_ocr.txt && cp "$OUT/${TAG}_menu_wait.png" "$OUT/${TAG}_menu_seen_no_safe.png"
+  done
+  if [ $seen = 0 ]; then
+    echo "::error::boot menu with the safe graphics entry never showed (last screen: $(head -c 300 /tmp/s_ocr.txt))"
+    mon quit; sleep 2; exit 1
+  fi
+  mon "sendkey end"; sleep 1.5; shot "${TAG}_a_menu_safe_selected"
+  convert "$OUT/${TAG}_a_menu_safe_selected.png" -resize 200% -colorspace Gray /tmp/s_big.png
+  tesseract /tmp/s_big.png - 2>/dev/null > "$OUT/${TAG}_a_menu_safe_selected.txt"
+  mon "sendkey ret"
+  for t in 1 2 3 4 5 6 7 8 9 10; do sleep 20; shot "${TAG}_b$(printf '%02d' $t)_$((t*20))s"; done
+  mon "sendkey ret"; sleep 2; typekeys "jarvis-install-test"; mon "sendkey ret"
+  for t in 1 2 3 4 5 6; do sleep 20; shot "${TAG}_c$(printf '%02d' $t)_desktop_$((t*20))s"; done
+  sleep 20; mon system_powerdown; for i in $(seq 1 60); do alive || break; sleep 2; done; alive && mon quit; sleep 2 ;;
 collect)
-  D=$1; OUT=$2; loopup "$D"; M=/tmp/m; sudo mkdir -p $M
+  D=$1; OUT=$2; mkdir -p "$OUT"; loopup "$D"; M=/tmp/m; sudo mkdir -p $M
+  B="$OUT/bootcfg_evidence.txt"; : > "$B"
+  # installed boot settings, half 1: the boot partition (ext4/xfs): boot entries (what GRUB passes the kernel),
+  # grub.cfg, the safe graphics entry (custom.cfg), grubenv
+  for p in "${LOOP}"p*; do
+    case "$(sudo blkid -o value -s TYPE "$p")" in ext4|xfs) ;; *) continue ;; esac
+    sudo mount -o ro "$p" $M || continue
+    if sudo test -d $M/loader/entries; then
+      for e in $(sudo find $M/loader/entries -name '*.conf' | sort); do
+        sudo cp "$e" "$OUT/boot__entry__$(basename "$e")"
+        echo "entry $(basename "$e"): title=$(sudo sed -n 's/^title[[:space:]]*//p' "$e") | options=$(sudo sed -n 's/^options[[:space:]]*//p' "$e")" >> "$B"
+      done
+      for g in grub.cfg custom.cfg grubenv user.cfg; do sudo test -f $M/grub2/$g && sudo cp $M/grub2/$g "$OUT/boot__$g"; done
+    fi
+    sudo umount $M
+  done
+  sudo chown -R "$USER" "$OUT"
+  n=$(ls "$OUT"/boot__entry__*.conf 2>/dev/null | wc -l); m=0
+  for e in "$OUT"/boot__entry__*.conf; do [ -f "$e" ] && grep -q '^options.*nvidia-drm.modeset=1' "$e" && m=$((m+1)); done
+  echo "entries-with-modeset: $m of $n" >> "$B"
+  [ -f "$OUT/boot__custom.cfg" ] && echo "custom.cfg: yes ($(grep -c '^menuentry' "$OUT/boot__custom.cfg") entry: $(grep -o "menuentry '[^']*'" "$OUT/boot__custom.cfg" | head -1))" >> "$B"
+  [ -f "$OUT/boot__custom.cfg" ] && grep -q 'nomodeset' "$OUT/boot__custom.cfg" && echo "custom.cfg-nomodeset: yes" >> "$B"
+  [ -f "$OUT/boot__grub.cfg" ] && grep -q 'custom.cfg' "$OUT/boot__grub.cfg" && echo "grub.cfg-reads-custom.cfg: yes" >> "$B"
+  [ -f "$OUT/boot__grub.cfg" ] && echo "grub.cfg: $(grep -m1 -o 'set timeout=[0-9-]*' "$OUT/boot__grub.cfg"), $(grep -c '^menuentry\|^ *menuentry' "$OUT/boot__grub.cfg") static menuentries, $(grep -q blscfg "$OUT/boot__grub.cfg" && echo blscfg), $(grep -q 'GRUB_THEME\|theme=' "$OUT/boot__grub.cfg" && echo themed), $(grep -qi windows "$OUT/boot__grub.cfg" && echo windows-entry)" >> "$B"
   for p in "${LOOP}"p*; do
     [ "$(sudo blkid -o value -s TYPE "$p")" = btrfs ] || continue
     sudo mount -o ro,subvolid=5 "$p" $M
-    for f in $(sudo find $M -path '*/var/log/*' \( -name 'jarvis-install-report.txt' -o -name 'jarvis-*post.log' -o -name 'jarvis-dualboot-guard.log' -o -path '*/anaconda/*' \) -type f 2>/dev/null); do
+    for f in $(sudo find $M -path '*/var/log/*' \( -name 'jarvis-install-report.txt' -o -name 'jarvis-*post.log' -o -name 'jarvis-dualboot-guard.log' -o -name 'jarvis-safe-graphics.log' -o -path '*/anaconda/*' \) -type f 2>/dev/null); do
       sudo cp "$f" "$OUT/$(basename "$(dirname "$f")")__$(basename "$f")"; done
+    # installed boot settings, half 2: the NVIDIA driver option file and the safe graphics script in each deployment
+    for dep in $(sudo find $M -maxdepth 6 -type d -path '*/ostree/deploy/*/deploy/*' -name '*.[0-9]' 2>/dev/null); do
+      mf="$dep/usr/lib/modprobe.d/90-jarvis-nvidia-kms.conf"
+      if sudo test -f "$mf"; then echo "modprobe-file: yes ($(basename "$dep"): $(sudo grep -v '^#' "$mf" | grep -m1 modeset))" >> "$B"
+      else echo "modprobe-file: no ($(basename "$dep"))" >> "$B"; fi
+      sudo test -f "$dep/usr/lib/bootc/kargs.d/90-jarvis-nvidia.toml" && echo "kargs.d-file: yes ($(basename "$dep"))" >> "$B"
+      sudo test -x "$dep/usr/libexec/jarvis-os/safe-graphics-entry" && echo "safe-graphics-script: yes ($(basename "$dep"))" >> "$B"
+      sudo test -L "$dep/etc/systemd/system/multi-user.target.wants/jarvis-safe-graphics.service" -o -L "$dep/usr/lib/systemd/system/multi-user.target.wants/jarvis-safe-graphics.service" \
+        && echo "safe-graphics-service-enabled: yes ($(basename "$dep"))" >> "$B"
+    done
     if [ -n "${LOGIN_USER:-}" ]; then   # the account typed in during the click-through install, and its first login
       E="$OUT/login_evidence.txt"
       # the deployment's own /etc/passwd (not the image default in usr/etc): the one that has the user
@@ -121,5 +185,6 @@ collect)
     fi
     sudo umount $M
   done
-  sudo chown -R "$USER" "$OUT"; loopdown; ls -la "$OUT"; cat "$OUT/login_evidence.txt" 2>/dev/null || true ;;
+  sudo chown -R "$USER" "$OUT"; loopdown; ls "$OUT" | grep -v '\.png$' | head -60; cat "$OUT/login_evidence.txt" 2>/dev/null || true
+  echo "--- installed boot settings ($OUT)"; cat "$B" ;;
 esac

@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# "JARVIS OS - safe graphics" boot-menu entry: the escape hatch if the screen ever stays black.
+# It starts the normal (default) system with basic graphics only: nomodeset and the NVIDIA driver kept from loading,
+# so the picture comes from the firmware's plain framebuffer (low resolution, no gaming, but a working desktop to
+# fix things from). Normal boots are not changed.
+# The entry lives in /boot/grub2/custom.cfg, which GRUB reads at the END of its menu (after the normal entries,
+# Windows and "UEFI Firmware Settings"), so it is never the default and it survives updates. ostree writes new
+# kernel paths on every update, so this rewrites the entry at every boot and again at shutdown right after an
+# update is finalized (jarvis-safe-graphics.service), and once from the installer (%post) for the very first boot.
+#   safe-graphics-entry          write/refresh the entry
+#   safe-graphics-entry --boot   also note this boot's kernel options in /var/log/jarvis-safe-graphics.log
+set -euo pipefail
+DIR="${JARVIS_BLS_DIR:-/boot/loader/entries}"
+OUT="${JARVIS_CUSTOM_CFG:-/boot/grub2/custom.cfg}"
+LOG="${JARVIS_SAFE_LOG:-/var/log/jarvis-safe-graphics.log}"
+log() { mkdir -p "$(dirname "$LOG")" 2>/dev/null || :; echo "$(date -Is 2>/dev/null) $*" >> "$LOG" 2>/dev/null || :; echo "$*"; }
+if [ "${1:-}" = "--boot" ]; then
+  log "boot cmdline: $(cat /proc/cmdline 2>/dev/null)"
+  case " $(cat /proc/cmdline 2>/dev/null) " in *" jarvis.safegraphics=1 "*) log "this boot used the safe graphics entry";; esac
+  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 400 ]; then tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"; fi
+fi
+[ -d "$DIR" ] || { log "no $DIR, nothing to do"; exit 0; }
+# the default system's entry: not the rollback one, the highest ostree-N (ostree numbers the default highest)
+best=""; bestn=-1
+for f in "$DIR"/ostree-*.conf; do
+  [ -f "$f" ] || continue
+  t="$(sed -n 's/^title[[:space:]]\+//p' "$f" | head -n1)"
+  case "$t" in *"previous (rollback)"*|*"(ostree:"[1-9]*) continue ;; esac
+  n="$(basename "$f" | sed -nE 's/^ostree-([0-9]+).*/\1/p')"; n=${n:-0}
+  [ "$n" -gt "$bestn" ] && { best=$f; bestn=$n; }
+done
+[ -n "$best" ] || { log "no default boot entry found in $DIR"; exit 0; }
+linux="$(sed -n 's/^linux[[:space:]]\+//p' "$best" | head -n1)"
+initrd="$(sed -n 's/^initrd[[:space:]]\+//p' "$best" | tr '\n' ' ' | sed 's/ *$//')"
+opts="$(sed -n 's/^options[[:space:]]\+//p' "$best" | head -n1)"
+[ -n "$linux" ] && [ -n "$opts" ] || { log "entry $best has no linux/options line"; exit 0; }
+safe=""
+for o in $opts; do
+  case "$o" in rhgb|quiet|nomodeset|nvidia-drm.*|nvidia.*|module_blacklist=*|jarvis.safegraphics=*) continue ;; esac
+  safe="$safe $o"
+done
+safe="${safe# } nomodeset module_blacklist=nvidia,nvidia_drm,nvidia_modeset,nvidia_uvm,nouveau jarvis.safegraphics=1"
+# find the boot partition the way the normal entries do: by its filesystem UUID, else by the kernel file itself
+uuid=""
+if [ -z "${JARVIS_BLS_DIR:-}" ] && mountpoint -q /boot; then uuid="$(findmnt -no UUID /boot 2>/dev/null || :)"; fi
+if [ -n "$uuid" ]; then findroot="search --no-floppy --fs-uuid --set=root $uuid"; else findroot="search --no-floppy --file --set=root $linux"; fi
+new="$(cat <<EOF
+# Written by JARVIS OS (/usr/libexec/jarvis-os/safe-graphics-entry) from $(basename "$best"); rewritten every boot.
+# The last boot-menu entry: the normal system with basic graphics, for a black screen. Delete this file to remove it.
+if [ -z "\${timeout}" ]; then set timeout=3; fi
+if [ "\${timeout}" -lt 3 ]; then set timeout=3; fi
+menuentry 'JARVIS OS - safe graphics (basic display, for a black screen)' --id jarvis-safe-graphics {
+  load_video
+  set gfxpayload=keep
+  insmod gzio
+  $findroot
+  echo 'JARVIS OS: starting with safe graphics (basic display)...'
+  linux $linux $safe
+  initrd $initrd
+}
+EOF
+)"
+if [ -f "$OUT" ] && [ "$(cat "$OUT")" = "$new" ]; then
+  log "safe graphics entry up to date ($(basename "$best"))"
+else
+  ro=0
+  if [ -z "${JARVIS_BLS_DIR:-}" ] && findmnt -no OPTIONS /boot 2>/dev/null | grep -qw ro; then mount -o remount,rw /boot && ro=1; fi
+  trap 'if [ "$ro" = 1 ]; then mount -o remount,ro /boot || :; fi' EXIT
+  mkdir -p "$(dirname "$OUT")"
+  printf '%s\n' "$new" > "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+  log "safe graphics entry written to $OUT from $(basename "$best")"
+fi
+G="$(dirname "$OUT")/grub.cfg"
+if [ -f "$G" ] && ! grep -q 'custom.cfg' "$G"; then log "WARNING: $G does not read custom.cfg, the entry will not show"; fi
+exit 0

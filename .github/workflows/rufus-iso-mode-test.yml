@@ -8,6 +8,8 @@
 #   fat32-gpt     the same stick with GPT ("UEFI (non CSM)") - boot to the installer
 #   ntfs          if NTFS is picked: NTFS + Rufus's own UEFI:NTFS partition (uefi-ntfs.img) - boot to the installer
 #   fat32-nopatch FAT32 WITHOUT the label patch (another file-copy tool) - expected to fail; recorded, not fatal
+# Rerun Oct 15 2026 on the newest release (v0.1.20261014, image D11); the install from the stick now also records
+# the installed boot settings (install_test.sh collect -> bootcfg_evidence.txt).
 name: rufus-iso-mode-test
 on:
   workflow_dispatch: { inputs: { tag: { description: "release tag (default: latest)", default: "" } } }
