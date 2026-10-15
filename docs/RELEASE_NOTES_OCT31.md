@@ -78,3 +78,6 @@ The full step-by-step is in `docs/INSTALL_DAY.md`.
 - **NVIDIA check**: a new automatic check reads, from inside each image, that the NVIDIA driver is set up to start
   early (so the boot splash and login screen use your RTX card from the start) and that nothing the base had is lost.
   If graphics ever fail, the screen falls back to plain mode instead of staying black.
+- **RTX screen from the first second**: the image now turns on the NVIDIA driver's own screen handling
+  (nvidia-drm.modeset=1) at boot, both as a boot setting and inside the early-boot files, instead of trusting the
+  driver's default. Only your real card can show it working; the fallback to plain mode stays.
