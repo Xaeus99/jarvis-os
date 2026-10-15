@@ -53,7 +53,8 @@ If Shrink offers much less than you asked, run Disk Cleanup, empty the Recycle B
      When Rufus asks **"ISOHybrid image detected"**, either choice works:
      **"Write in DD Image mode"** is the safest (it copies the stick exactly, like Fedora Media Writer), and
      Rufus's default **"Write in ISO Image mode"** was tested too: it booted and installed fine. If you're unsure,
-     pick DD mode, then OK.
+     pick DD mode, then OK. Don't change *File system* to NTFS: Rufus picks FAT32 by itself, and an NTFS stick
+     didn't start in our test.
 3. It takes 5-15 minutes. Windows may say the stick "needs to be formatted" afterwards: click **Cancel**. That's
    normal, Windows just can't read it.
 
@@ -129,4 +130,6 @@ All in virtual machines with a fake Windows disk, not on your real PC:
   the boot menu to match): built the way Rufus 4.15 does it, it started on UEFI, reached the safety page (Windows
   found and locked) and the installer, and a full click-through install from that stick worked, with Windows
   byte-identical afterwards (test run 38652813253). Also boots from a GPT-partitioned FAT32 stick.
+  Two ways it does NOT work: an **NTFS** stick (only if you change Rufus's File system box; it stopped at a
+  black GRUB text prompt), and a FAT32 stick without Rufus's boot-menu fix (Rufus always does the fix itself).
   This copies what Rufus does; real Rufus on a real stick wasn't run, so DD mode stays the safest pick.
