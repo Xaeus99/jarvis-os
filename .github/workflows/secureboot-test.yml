@@ -1,0 +1,96 @@
+# Secure Boot test: the real installer ISO (released kickstart) on firmware with Secure Boot ON and Microsoft's keys
+# enrolled, like a Windows 11 PC. Does the installer boot with Secure Boot on? Then the first restart must show the
+# blue MOK screen; enrolling the Universal Blue key (password universalblue, as the install-day guide says) must let
+# the installed system boot with Secure Boot enforced and trust the key that signs the NVIDIA driver.
+# If the installer can't boot with Secure Boot on, the test installs with it off (what the guide would then say),
+# turns it back on, and checks the rest.
+name: secureboot-test
+on:
+  workflow_dispatch:
+  push: { branches: [main], paths: [".github/workflows/secureboot-test.yml", "image/disk_config/release.env"] }
+permissions: { contents: read, packages: read }
+concurrency: { group: secureboot-test, cancel-in-progress: false }
+env:
+  SB_CODE: /usr/share/OVMF/OVMF_CODE_4M.secboot.fd
+  SB_VARS: /usr/share/OVMF/OVMF_VARS_4M.ms.fd
+jobs:
+  sb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ublue-os/remove-unwanted-software@v9
+      - name: Tools (KVM, QEMU, OVMF with Secure Boot, OCR, NTFS, GPT)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat tesseract-ocr ntfs-3g gdisk dosfstools mtools btrfs-progs parted systemd
+          ls -la /usr/share/OVMF/ | grep -i -E "secboot|ms\.fd"
+          chmod +x tools/*.sh; python3 tools/sync_installer_guard.py --check
+      - name: Build the installer ISO (the released kickstart, unchanged)
+        run: |
+          . image/disk_config/release.env
+          CHANNEL="${IMAGE_REF%%@*}"; IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
+          echo "image: $IMAGE:$IMAGE_REF" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p output
+          sudo podman pull "$IMAGE:$IMAGE_REF"
+          [ "$IMAGE:$IMAGE_REF" = "$IMAGE:$CHANNEL" ] || sudo podman tag "$IMAGE:$IMAGE_REF" "$IMAGE:$CHANNEL"
+          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
+            -v ./image/disk_config/iso.toml:/config.toml:ro -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
+            "$IMAGE:$CHANNEL"
+          sudo chown -R "$USER" output
+          bash tools/release/brand_iso.sh output/bootiso/install.iso
+          sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h / /mnt
+      - name: Dummy Windows disk
+        run: |
+          mkdir -p shots
+          if sudo install -d -o "$USER" /mnt/work; then D=/mnt/work/disk.raw; else D=$PWD/disk.raw; fi
+          echo "DISK=$D" >> "$GITHUB_ENV"
+          tools/install_test.sh prepare "$D"
+          tools/install_test.sh fingerprint "$D" shots/fingerprint_before.txt >/dev/null
+      - name: Install with Secure Boot ON (click-through, Enter on the safety page)
+        id: sbon
+        continue-on-error: true
+        run: |
+          FW_CODE=$SB_CODE FW_VARS=$SB_VARS QMACHINE=q35,smm=on FW_EXTRA="-global driver=cfi.pflash01,property=secure,value=on" \
+            tools/clickthrough_test.sh enter output/bootiso/install.iso "$DISK" shots/sb_on
+      - name: (only if that failed) install with Secure Boot OFF, then switch it back on
+        if: steps.sbon.outcome != 'success'
+        run: |
+          echo "INSTALL_SB=off" >> "$GITHUB_ENV"
+          tools/install_test.sh prepare "$DISK"
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_before.txt >/dev/null
+          # same Microsoft-key variables, firmware build without Secure Boot enforcement = "Secure Boot disabled"
+          FW_VARS=$SB_VARS tools/clickthrough_test.sh enter output/bootiso/install.iso "$DISK" shots/sb_off
+      - name: First restart, Secure Boot ON - the blue MOK screen, enroll the key
+        run: |
+          FW_CODE=$SB_CODE QMACHINE=q35,smm=on FW_EXTRA="-global driver=cfi.pflash01,property=secure,value=on" \
+            tools/install_test.sh mokenroll "$DISK" shots boot1
+      - name: Second boot, Secure Boot ON
+        run: |
+          FW_CODE=$SB_CODE QMACHINE=q35,smm=on FW_EXTRA="-global driver=cfi.pflash01,property=secure,value=on" \
+            tools/install_test.sh boot "$DISK" shots boot2
+      - name: Verdict
+        run: |
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after.txt >/dev/null
+          tools/install_test.sh journal "$DISK" shots/journal > /dev/null
+          J=shots/journal/journal_evidence.txt; ok=1
+          pass() { echo "PASS $*" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          fail() { echo "::error::$*"; echo "FAIL $*" >> "$GITHUB_STEP_SUMMARY"; ok=0; }
+          if [ "${INSTALL_SB:-on}" = on ]; then pass "the installer boots and installs with Secure Boot ON"
+          else echo "RESULT the installer did NOT come up with Secure Boot on; installed with it off (see shots/sb_on)" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+          cat shots/boot1_mok_steps.txt
+          grep -q "enrolled=1" shots/boot1_mok_steps.txt && pass "blue MOK screen at the first restart; key enrolled with the password ($(grep -c '|' shots/boot1_mok_steps.txt) screens)" || fail "MOK enrollment did not happen"
+          cut -c1-200 "$J"
+          grep -a -i -q "secure boot enabled\|secureboot: secure boot enabled" "$J" && pass "installed system booted with Secure Boot enforced" || fail "no 'Secure boot enabled' in the installed system's kernel log"
+          grep -a -i -E "x\.509" "$J" | grep -a -i -q -E "universal ?blue|ublue|akmods" && pass "the kernel trusts the Universal Blue key (signs the NVIDIA driver): $(grep -a -i -E 'x\.509' "$J" | grep -a -i -o -E "cert '[^']*(ublue|universal|akmods)[^']*'" | head -1)" || fail "the Universal Blue key is not in the kernel's trusted keys"
+          [ "$(grep -a -c 'graphical.target' "$J")" -ge 1 ] && pass "reached the desktop target with Secure Boot on" || fail "graphical.target not reached"
+          if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_after.txt) >/dev/null; then
+            pass "Windows byte-identical"; else fail "Windows changed"; fi
+          echo "### secureboot-test: $( [ $ok = 1 ] && echo PASS || echo FAIL ) (installer with Secure Boot ${INSTALL_SB:-on})" >> "$GITHUB_STEP_SUMMARY"
+          [ $ok = 1 ]
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: secureboot-test, path: shots/ }

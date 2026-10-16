@@ -39,9 +39,10 @@ case ${BOOT_MEDIA:-cd} in
   *) echo "BOOT_MEDIA must be cd or usb"; exit 2 ;;
 esac
 startvm() { # startvm N: fresh VM (fresh firmware variables) booting the ISO's "Install" entry
-  rm -f /tmp/vars.fd $MON $QMP; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
-  qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+  rm -f /tmp/vars.fd $MON $QMP; cp "${FW_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}" /tmp/vars.fd
+  # FW_CODE/FW_VARS/QMACHINE/FW_EXTRA: Secure Boot firmware for tools/secureboot (defaults: plain OVMF, as before)
+  qemu-system-x86_64 -enable-kvm -machine "${QMACHINE:-q35}" ${FW_EXTRA:-} -cpu host -smp 4 -m 8192 \
+    -drive if=pflash,format=raw,readonly=on,file="${FW_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}" \
     -drive if=pflash,format=raw,file=/tmp/vars.fd \
     -drive file="$DISK",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
     "${MEDIA[@]}" \

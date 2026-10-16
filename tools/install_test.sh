@@ -22,8 +22,8 @@ loopup() { LOOP=$(sudo losetup -f --show -P "$1"); sudo partprobe "$LOOP" 2>/dev
 loopdown() { sudo losetup -d "$LOOP"; }
 qemu() { # qemu DISK [extra args...]
   local disk=$1; shift
-  qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+  qemu-system-x86_64 -enable-kvm -machine "${QMACHINE:-q35}" ${FW_EXTRA:-} -cpu host -smp 4 -m 8192 \
+    -drive if=pflash,format=raw,readonly=on,file="${FW_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}" \
     -drive if=pflash,format=raw,file=/tmp/vars.fd \
     -drive file="$disk",if=none,format=raw,id=hd,cache=unsafe -device virtio-blk-pci,drive=hd,bootindex=2 \
     -device virtio-vga -display none -nic user,model=virtio-net-pci \
@@ -85,7 +85,7 @@ fingerprint)
   echo "# all partitions now (info)" >> "$F"; sudo sgdisk -p "$D" >> "$F"; sudo blkid "${LOOP}"p* >> "$F"
   loopdown; cat "$F" ;;
 install)
-  D=$1; ISO=$2; OUT=$3; mkdir -p "$OUT"; cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
+  D=$1; ISO=$2; OUT=$3; mkdir -p "$OUT"; cp "${FW_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}" /tmp/vars.fd
   qemu "$D" -drive file="$ISO",if=none,media=cdrom,id=cd,readonly=on -device ide-cd,drive=cd,bus=ide.1,bootindex=1 \
        -serial file:"$OUT/serial_install.log" -no-reboot
   shot i00_firmware; sleep 12; shot i01_iso_menu
@@ -128,6 +128,48 @@ bootsafe)
   mon "sendkey ret"; sleep 2; typekeys "jarvis-install-test"; mon "sendkey ret"
   for t in 1 2 3 4 5 6; do sleep 20; shot "${TAG}_c$(printf '%02d' $t)_desktop_$((t*20))s"; done
   sleep 20; mon system_powerdown; for i in $(seq 1 60); do alive || break; sleep 2; done; alive && mon quit; sleep 2 ;;
+mokenroll)
+  # Secure Boot: the first restart after the install shows shim's blue "MOK management" screen (the installer queued
+  # the Universal Blue key). Does what the install-day guide says: any key > Enroll MOK > Continue > Yes > password
+  # universalblue > Reboot; then the system boots on, and the person logs in.
+  D=$1; OUT=$2; TAG=$3; mkdir -p "$OUT"; M_LOG="$OUT/${TAG}_mok_steps.txt"; : > "$M_LOG"
+  qemu "$D" -serial file:"$OUT/serial_$TAG.log"
+  ocr() { mon "screendump /tmp/s.ppm"; sleep 0.4; convert /tmp/s.ppm "$OUT/${TAG}_mok_last.png" 2>/dev/null || return 1
+    convert "$OUT/${TAG}_mok_last.png" -resize 200% -colorspace Gray -negate /tmp/m_big.png 2>/dev/null
+    { tesseract /tmp/m_big.png - 2>/dev/null; convert "$OUT/${TAG}_mok_last.png" -resize 200% -colorspace Gray /tmp/m_big2.png; tesseract /tmp/m_big2.png - 2>/dev/null; } \
+      | tr '[:upper:]' '[:lower:]' | tr -s ' \n' ' ' > /tmp/m_ocr.txt; }
+  step() { echo "$(date +%T) $1 | $(head -c 160 /tmp/m_ocr.txt)" | tee -a "$M_LOG"; cp "$OUT/${TAG}_mok_last.png" "$OUT/${TAG}_mok_$(printf '%02d' $n)_$1.png"; n=$((n+1)); }
+  n=0; enrolled=0; seen=0
+  for i in $(seq 1 150); do
+    sleep 2; alive || break; ocr || continue
+    if grep -q "password" /tmp/m_ocr.txt; then step password; typekeys "universalblue"; mon "sendkey ret"; sleep 3; enrolled=1
+    elif grep -Eq "enroll the key|enroll the keys" /tmp/m_ocr.txt; then step yes; mon "sendkey down"; sleep 0.5; mon "sendkey ret"; sleep 2
+    elif grep -q "view key" /tmp/m_ocr.txt; then step continue; mon "sendkey down"; sleep 0.5; mon "sendkey ret"; sleep 2
+    elif grep -q "reboot" /tmp/m_ocr.txt && [ $enrolled = 1 ]; then step reboot; mon "sendkey ret"; break
+    elif grep -q "enroll mok" /tmp/m_ocr.txt; then step enroll_mok; seen=1; mon "sendkey down"; sleep 0.5; mon "sendkey ret"; sleep 2
+    elif grep -Eq "press any key|mok management|shim ui" /tmp/m_ocr.txt; then step any_key; seen=1; mon "sendkey ret"; sleep 2
+    elif grep -Eq "jarvis os|login|password for" /tmp/m_ocr.txt && [ $seen = 0 ] && [ $i -gt 40 ]; then step no_mok_screen; break
+    fi
+  done
+  echo "mok: seen=$seen enrolled=$enrolled" | tee -a "$M_LOG"
+  for t in 1 2 3 4 5 6 7 8 9 10 11; do sleep 20; shot "${TAG}_b$(printf '%02d' $t)_$((t*20))s"; done
+  mon "sendkey ret"; sleep 2; typekeys "jarvis-install-test"; mon "sendkey ret"
+  for t in 1 2 3 4 5; do sleep 20; shot "${TAG}_c$(printf '%02d' $t)_desktop_$((t*20))s"; done
+  sleep 20; mon system_powerdown; for i in $(seq 1 60); do alive || break; sleep 2; done; alive && mon quit; sleep 2
+  [ $enrolled = 1 ] ;;
+journal)
+  # the installed system's own journal (kernel: Secure Boot state, the keys it trusts; the desktop target)
+  D=$1; OUT=$2; mkdir -p "$OUT"; loopup "$D"; M=/tmp/m; sudo mkdir -p $M
+  for p in "${LOOP}"p*; do
+    [ "$(sudo blkid -o value -s TYPE "$p")" = btrfs ] || continue
+    sudo mount -o ro,subvolid=5 "$p" $M
+    for j in $(sudo find $M -path '*/var/log/journal/*' -name '*.journal' 2>/dev/null); do sudo cp "$j" "$OUT/"; done
+    sudo umount $M
+  done
+  loopdown; sudo chown -R "$USER" "$OUT"
+  for j in "$OUT"/*.journal; do [ -f "$j" ] && journalctl --file "$j" --no-pager -o short-monotonic 2>/dev/null; done \
+    | grep -a -i -E "secure ?boot|lockdown|x\.509|mok|universal blue|ublue|akmods|graphical\.target|Linux version" | sort -u | head -80 > "$OUT/journal_evidence.txt"
+  cat "$OUT/journal_evidence.txt" | cut -c1-220 ;;
 collect)
   D=$1; OUT=$2; mkdir -p "$OUT"; loopup "$D"; M=/tmp/m; sudo mkdir -p $M
   B="$OUT/bootcfg_evidence.txt"; : > "$B"
