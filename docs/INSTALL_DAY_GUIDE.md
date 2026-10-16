@@ -2,6 +2,7 @@
 
 About 1 to 1.5 hours. Windows stays on your PC. You pick JARVIS OS or Windows every time the PC starts.
 Do the steps in order. If something on screen doesn't match this guide, **stop and text JARVIS/Tab a photo of the screen**.
+The same steps on one page: [INSTALL_DAY_CHECKLIST.md](INSTALL_DAY_CHECKLIST.md).
 
 You need: your PC, a USB stick of **16 GB or more** (it gets wiped), another phone or device to read this on,
 and about 100 GB of free space on your main drive (at least 40 GB).
@@ -70,7 +71,8 @@ If you don't see "Use a device": restart and tap the **boot menu key** as soon a
 ASUS **F8**, MSI **F11**, Gigabyte **F12**, ASRock **F11**, prebuilt HP **F9**, Dell/Lenovo **F12**. Pick the entry
 that starts with **UEFI:** and has your stick's name.
 
-If the PC says "Secure Boot violation" or won't start the stick, text JARVIS/Tab a photo. Don't change other
+Leave **Secure Boot on**: the stick starts with it on (tested on firmware set up like a Windows 11 PC).
+If the PC still says "Secure Boot violation" or won't start the stick, text JARVIS/Tab a photo. Don't change other
 BIOS settings on your own.
 
 ## 6. The installer, screen by screen (30-40 min)
@@ -103,8 +105,9 @@ after 2 minutes, still locked.)
 
 **h. Blue screen "Perform MOK management"** (only once, needed for the NVIDIA driver with Secure Boot):
    **Enroll MOK** > **Continue** > **Yes** > type the password **universalblue** (you won't see letters
-   appear) > Enter > **Reboot**. If you miss it (it waits, but not forever) the PC still starts; JARVIS OS just
-   uses basic graphics until you redo it (text JARVIS/Tab, we'll do it together).
+   appear) > Enter > **Reboot**. (Tested with Secure Boot on: after this, JARVIS OS starts with Secure Boot still
+   on and trusts the key that signs the NVIDIA driver.) If you miss it (it waits, but not forever) the PC still
+   starts; JARVIS OS just uses basic graphics until you redo it (text JARVIS/Tab, we'll do it together).
 
 **i. The JARVIS menu**: **JARVIS OS** is first, then **Windows Boot Manager**. Pick JARVIS OS. You'll see the
 arc reactor splash, then the login screen. Log in with the password from step e. Done!
@@ -124,6 +127,12 @@ stay the same; the entry is just always there at the bottom of the menu.
 - **Last resort**: tap the boot menu key (step 5) and pick **Windows Boot Manager**.
 
 Removing JARVIS OS later is possible too (Windows can delete its partitions and extend C: again), ask first.
+
+## 8. Updates
+
+JARVIS OS updates itself in the background and switches over the next time you restart (never by itself
+mid-game). The version before stays in the menu as **previous (rollback)**: pick it if an update ever misbehaves,
+or say "roll back the update". "Check for updates" and "update JARVIS OS" work by voice too.
 
 ---
 

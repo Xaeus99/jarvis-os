@@ -8,11 +8,11 @@ on:
   workflow_dispatch: { inputs: { tag: { default: "" }, publish: { default: "" } } }
   push: { branches: [main], paths: [".github/workflows/build-iso.yml", "image/disk_config/iso.toml", "image/disk_config/release.env", "tools/iso_boot_test.sh", "tools/release/**", "image/installer/art/**"] }
 permissions: { contents: write, packages: read, actions: read }
-concurrency: { group: build-iso, cancel-in-progress: false }
+concurrency: { group: build-iso-publish, cancel-in-progress: false }
 jobs:
   iso:
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: ublue-os/remove-unwanted-software@v9
@@ -88,13 +88,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.PUB != 'yes'
         with: { name: "jarvis-os-${{ env.VERSION }}-iso", path: dist/, retention-days: 30, compression-level: 0 }
-      - name: Publish only if this commit's dual-boot tests passed (install test + click-through test)
+      - name: Publish only if every test of this commit passed (install, click-through, update, Secure Boot, NVIDIA, voice)
         if: env.PUB == 'yes'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          # both run on the same push as this workflow (release.env); wait for them, up to 100 min
-          for wf in install-test.yml clickthrough-test.yml; do
-            for i in $(seq 1 100); do
+          # all run on the same push as this workflow (release.env); wait for each, up to 240 min
+          # (install test, click-through x3, OTA update + rollback + unsigned refusal, Secure Boot + MOK, NVIDIA settings, voice)
+          for wf in install-test.yml clickthrough-test.yml update-test.yml secureboot-test.yml nvidia-boot-check.yml standalone-test.yml; do
+            for i in $(seq 1 240); do
               c=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?head_sha=$GITHUB_SHA&per_page=5" \
                   --jq '[.workflow_runs[] | select(.event == "push")][0] | "\(.status) \(.conclusion) \(.id)"' 2>/dev/null || echo "?")
               echo "$(date -u +%H:%M) $wf: $c"
@@ -102,7 +103,7 @@ jobs:
                 "completed success "*) echo "PASS $wf (run ${c##* })" >> "$GITHUB_STEP_SUMMARY"; break ;;
                 completed*) echo "::error::$wf failed on this commit (run ${c##* }): not publishing"; exit 1 ;;
               esac
-              [ $i = 100 ] && { echo "::error::$wf did not finish: not publishing"; exit 1; }
+              [ $i = 240 ] && { echo "::error::$wf did not finish: not publishing"; exit 1; }
               sleep 60
             done
           done

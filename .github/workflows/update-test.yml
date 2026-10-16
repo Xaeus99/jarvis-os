@@ -10,7 +10,7 @@ on:
   workflow_dispatch: { inputs: { from: { default: "" }, channel: { default: "" } } }
   push: { branches: [main], paths: [".github/workflows/update-test.yml", "tools/update_test.sh", "image/disk_config/release.env"] }
 permissions: { contents: read, packages: write }
-concurrency: { group: update-test, cancel-in-progress: false }
+concurrency: { group: "update-test-${{ github.sha }}", cancel-in-progress: false }
 jobs:
   update:
     runs-on: ubuntu-24.04

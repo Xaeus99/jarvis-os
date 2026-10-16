@@ -1,3 +1,4 @@
+# Rerun Oct 16 2026 on beta = D13 (1.0.0-rc1: voice update commands through the root helper).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:

@@ -86,6 +86,11 @@ jobs:
           cut -c1-200 "$J"
           grep -a -i -q "secure boot enabled\|secureboot: secure boot enabled" "$J" && pass "installed system booted with Secure Boot enforced" || fail "no 'Secure boot enabled' in the installed system's kernel log"
           grep -a -i -E "x\.509" "$J" | grep -a -i -q -E "universal ?blue|ublue|akmods" && pass "the kernel trusts the Universal Blue key (signs the NVIDIA driver): $(grep -a -i -E 'x\.509' "$J" | grep -a -i -o -E "cert '[^']*(ublue|universal|akmods)[^']*'" | head -1)" || fail "the Universal Blue key is not in the kernel's trusted keys"
+          # the NVIDIA driver itself under Secure Boot: no GPU in the VM, but the early-boot modprobe runs its init
+          # ("NVRM: No NVIDIA GPU found") only if its signature was accepted
+          if grep -a -q "NVRM: No NVIDIA GPU found" "$J" && ! grep -a -i -q -E "key was rejected|verification failed|unavailable key" "$J"; then
+            pass "the NVIDIA driver loads with Secure Boot on (signature accepted; the VM has no NVIDIA card, so it stops at 'No NVIDIA GPU found')"
+          else fail "the NVIDIA driver did not load under Secure Boot ($(grep -a -i -E 'nvidia|rejected|verification' "$J" | head -2 | tr '\n' ' ' | cut -c1-200))"; fi
           [ "$(grep -a -c 'graphical.target' "$J")" -ge 1 ] && pass "reached the desktop target with Secure Boot on" || fail "graphical.target not reached"
           if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_after.txt) >/dev/null; then
             pass "Windows byte-identical"; else fail "Windows changed"; fi
