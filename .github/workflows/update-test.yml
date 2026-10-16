@@ -1,0 +1,111 @@
+# OTA update test: install JARVIS OS from an OLDER image (default D11, the v0.1.20261014 release), then let it update
+# the way a real install does: `bootc upgrade` pulls the channel's current signed image (cosign key in the image's
+# policy), it applies on the next restart, the boot menu's "previous (rollback)" entry boots the old version, the next
+# normal start is back on the new one, and an UNSIGNED image of the same repo is refused.
+# Also checks the safe graphics entry follows the update, and that the voice commands' root helper works for the
+# person's account (jarvisd runs as the person; bootc needs root).
+# Channel: the tag part of IMAGE_REF in image/disk_config/release.env (beta for a release candidate, stable after).
+name: update-test
+on:
+  workflow_dispatch: { inputs: { from: { default: "" }, channel: { default: "" } } }
+  push: { branches: [main], paths: [".github/workflows/update-test.yml", "tools/update_test.sh", "image/disk_config/release.env"] }
+permissions: { contents: read, packages: write }
+concurrency: { group: update-test, cancel-in-progress: false }
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      D11: "sha256:d3afcec051e079da86b866d2b02c489c69dabaa3a449a0876c05f47f2a6848ca"   # v0.1.20261014
+      D12: "sha256:0db3b1a8c55dd3d1a036416bd062449e06c00617c29a9dca35a50c2ec1a1ef88"   # v0.1.20261015 (has the safe graphics entry)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ublue-os/remove-unwanted-software@v9
+      - name: Tools (KVM, QEMU, OVMF, NTFS, GPT, OCR)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf imagemagick socat ntfs-3g gdisk dosfstools mtools btrfs-progs parted tesseract-ocr skopeo
+          chmod +x tools/*.sh; df -h /
+      - name: Which images
+        run: |
+          . image/disk_config/release.env
+          CH="${{ inputs.channel }}"; CH="${CH:-${IMAGE_REF%%@*}}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jarvis-os"
+          TARGET=$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:$CH")
+          # default old image: the newest release that isn't the target (D12 also proves the safe graphics entry is
+          # rewritten after a real update), else D11
+          FROM="${{ inputs.from }}"; [ -n "$FROM" ] || { [ "$TARGET" = "$D12" ] && FROM=$D11 || FROM=$D12; }
+          PIN=""; case "$IMAGE_REF" in *@*) PIN="${IMAGE_REF#*@}";; esac
+          { echo "CH=$CH"; echo "FROM=$FROM"; echo "IMAGE=$IMAGE"; echo "TARGET=$TARGET"; } >> "$GITHUB_ENV"
+          { echo "### update test"; echo "- installed from: $IMAGE@$FROM"; echo "- follows channel: $CH"
+            echo "- expected update: $TARGET (release.env pin: ${PIN:-none}$([ "$PIN" = "$TARGET" ] && echo ', same'))"; } | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$FROM" != "$TARGET" ] || { echo "::error::nothing to update: the old image is the channel's current image"; exit 1; }
+      - name: An UNSIGNED image of the same repo (must be refused by installed systems)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman pull "$IMAGE@$FROM"
+          printf 'FROM %s\nRUN echo "unsigned test image, never install" > /usr/share/jarvis-update-test-unsigned\n' "$IMAGE@$FROM" > /tmp/Containerfile.unsigned
+          sudo podman build -t "$IMAGE:update-test-unsigned" -f /tmp/Containerfile.unsigned /tmp
+          sudo podman push "$IMAGE:update-test-unsigned"      # no cosign signature for this digest
+          echo "pushed $IMAGE:update-test-unsigned $(skopeo inspect --format '{{.Digest}}' docker://$IMAGE:update-test-unsigned)"
+          sudo podman rmi -f "$IMAGE:update-test-unsigned" >/dev/null
+      - name: Test installer ISO from the OLD image, following the channel's tag
+        run: |
+          tools/update_test.sh kickstart image/disk_config/install-test.toml /tmp/update-test.toml
+          sudo podman tag "$IMAGE@$FROM" "$IMAGE:$CH"
+          mkdir -p output
+          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
+            -v /tmp/update-test.toml:/config.toml:ro -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest --type anaconda-iso --rootfs btrfs --use-librepo=True \
+            "$IMAGE:$CH"
+          sudo chown -R "$USER" output; ls -la output/bootiso
+          sudo podman rmi -a -f >/dev/null 2>&1 || true; df -h /
+      - name: Dummy Windows disk + install + first boot
+        run: |
+          mkdir -p shots
+          if sudo install -d -o "$USER" /mnt/work; then D=/mnt/work/disk.raw; else D=$PWD/disk.raw; fi
+          echo "DISK=$D" >> "$GITHUB_ENV"
+          tools/install_test.sh prepare "$D"
+          tools/install_test.sh fingerprint "$D" shots/fingerprint_before.txt >/dev/null
+          tools/install_test.sh install "$D" output/bootiso/install.iso shots
+          rm -rf output
+          tools/install_test.sh boot "$D" shots boot1
+      - name: Boot 2 - the update (bootc upgrade, applies at the next restart)
+        run: tools/update_test.sh bootphase "$DISK" shots p2_upgrade upgrade
+      - name: Boot 3 - the new version
+        run: tools/update_test.sh bootphase "$DISK" shots p3_new new
+      - name: Boot 4 - "previous (rollback)" picked from the boot menu
+        run: tools/update_test.sh bootphase "$DISK" shots p4_rollback record rollback
+      - name: Boot 5 - normal start again (new version), unsigned image refused
+        run: tools/update_test.sh bootphase "$DISK" shots p5_final final
+      - name: Verdict
+        run: |
+          tools/install_test.sh fingerprint "$DISK" shots/fingerprint_after.txt >/dev/null
+          tools/install_test.sh collect "$DISK" shots > shots/collect.txt 2>&1 || true
+          L=$(ls shots/*jarvis-update-test.txt 2>/dev/null | head -1); P=$(ls shots/*jarvis-update-test-post.log 2>/dev/null | head -1)
+          cat "$P" 2>/dev/null; grep -a "JARVIS-UPDATE-TEST" shots/serial_p*.log | cut -c1-500
+          F=${FROM#sha256:}; T=${TARGET#sha256:}; ok=1
+          g() { grep -a "JARVIS-UPDATE-TEST $1" shots/serial_$2.log | tail -1; }
+          pass() { echo "PASS $*" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          fail() { echo "::error::$*"; echo "FAIL $*" >> "$GITHUB_STEP_SUMMARY"; ok=0; }
+          g "upgrade STATUS-BEFORE" p2_upgrade | grep -q "booted=[^ ]*$F" && pass "installed system runs the old image ${F:0:12}" || fail "boot 2 was not on the old image"
+          g "upgrade STATUS-BEFORE" p2_upgrade | grep -q "booted=$IMAGE:$CH|" && pass "it follows $IMAGE:$CH" || fail "installed system does not follow $IMAGE:$CH"
+          g "upgrade STATUS-AFTER" p2_upgrade | grep -q "staged=[^ ]*$T" && pass "bootc upgrade staged the signed update ${T:0:12}" || fail "the update was not staged"
+          g "new STATUS-BEFORE" p3_new | grep -q "booted=[^ ]*$T" && pass "after a restart the new image runs" || fail "boot 3 is not on the new image"
+          g "new STATUS-BEFORE" p3_new | grep -q "rollback=[^ ]*$F" && pass "the old image is kept as rollback" || fail "no rollback entry for the old image"
+          g "safe-graphics-matches-booted" p3_new | grep -q yes && pass "safe graphics entry follows the update" || fail "safe graphics entry still points at the old version"
+          if g "helper-check" p3_new | grep -q absent; then echo "::warning::the new image has no os-update helper (voice update commands not checked)"
+          else g "helper-check" p3_new | grep -q "rc=0" && pass "voice update commands work as the person (pkexec helper, no password)" || fail "the os-update helper failed for the person's account"; fi
+          g "record STATUS-BEFORE" p4_rollback | grep -q "booted=[^ ]*$F" && pass "'previous (rollback)' in the boot menu boots the old version" || fail "the boot menu's rollback entry did not boot the old image"
+          g "final STATUS-BEFORE" p5_final | grep -q "booted=[^ ]*$T" && pass "next normal start is back on the new version" || fail "boot 5 is not on the new image"
+          g "unsigned-switch" p5_final | grep -q "rc=0" && fail "an UNSIGNED image was accepted" || \
+            { g "unsigned-switch" p5_final | grep -qi "signature" && pass "an unsigned image is refused ($(g unsigned-switch p5_final | grep -o -i '[^ ]*signature[^.]*' | head -1 | cut -c1-120))" || fail "unsigned switch failed for another reason"; }
+          if diff <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_before.txt) <(sed -n '1,/^# EFI\/Boot fallback/p' shots/fingerprint_after.txt) >/dev/null; then
+            pass "Windows partitions and boot files byte-identical after install + update + rollback"; else fail "Windows changed"; fi
+          echo "### update-test: $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
+          [ $ok = 1 ]
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-test, path: shots/ }

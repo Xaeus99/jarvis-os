@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# JARVIS OS updates for the voice commands ("check for updates", "update JARVIS OS", "roll back the update").
+# bootc needs root and jarvisd runs as the person, so jarvisd calls this through pkexec (polkit action
+# os.jarvis.os-update; the rule in /usr/share/polkit-1/rules.d lets the PC's admin account run it without a
+# password prompt, because a voice command has no password box). It only ever runs these fixed bootc commands:
+#   status | check | stage | rollback | switch stable|beta
+# Nothing here reboots: a staged update or a rollback applies at the next restart, and the previous version
+# stays in the boot menu as "previous (rollback)".
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "os-update: needs root (run it through pkexec)" >&2; exit 126; }
+REPO=$(sed -n 's/^IMAGE_REPO=//p' /usr/lib/jarvis-os/version 2>/dev/null | head -1)
+case "${1:-}" in
+  status)   exec bootc status --format json ;;
+  check)    exec bootc upgrade --check ;;
+  stage)    exec bootc upgrade ;;
+  rollback) exec bootc rollback ;;
+  switch)
+    case "${2:-}" in stable|beta) ;; *) echo "os-update: channel must be stable or beta" >&2; exit 2 ;; esac
+    [ -n "$REPO" ] || { echo "os-update: no IMAGE_REPO in /usr/lib/jarvis-os/version" >&2; exit 2; }
+    exec bootc switch "$REPO:$2" ;;
+  *) echo "usage: os-update status|check|stage|rollback|switch stable|beta" >&2; exit 2 ;;
+esac

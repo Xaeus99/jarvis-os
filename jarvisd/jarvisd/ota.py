@@ -11,12 +11,16 @@ Lane 2, the JARVIS app (minutes, no reboot): jarvisd checks a signed manifest (E
 from __future__ import annotations
 import json
 
+# bootc needs root; jarvisd runs as the person. Every bootc call goes through the fixed root helper via pkexec
+# (polkit action os.jarvis.os-update; the image's polkit rule lets the admin account run it without a prompt).
+HELPER = ["pkexec", "/usr/libexec/jarvis-os/os-update"]
+
 class Bootc:
     def __init__(self, run):
         self.run = run
 
     def status(self):
-        code, out = self.run(["bootc", "status", "--format", "json"], timeout=30)
+        code, out = self.run(HELPER + ["status"], timeout=60)
         if code != 0:
             raise RuntimeError(out.strip()[:300])
         st = json.loads(out)
@@ -29,7 +33,7 @@ class Bootc:
         return {"booted": img("booted"), "staged": img("staged"), "rollback": img("rollback")}
 
     def check(self):
-        code, out = self.run(["bootc", "upgrade", "--check"], timeout=120)
+        code, out = self.run(HELPER + ["check"], timeout=180)
         if code != 0:
             raise RuntimeError(out.strip()[:300])
         if "No changes" in out or "No update available" in out:
@@ -38,15 +42,18 @@ class Bootc:
 
     def stage(self):
         """Download + stage the update for next boot. Never reboots by itself."""
-        code, out = self.run(["bootc", "upgrade"], timeout=1800)
+        code, out = self.run(HELPER + ["stage"], timeout=3600)
         return code == 0, out.strip()[-400:]
 
     def rollback(self):
-        code, out = self.run(["bootc", "rollback"], timeout=120)
+        code, out = self.run(HELPER + ["rollback"], timeout=180)
         return code == 0, out.strip()[-400:]
 
     def switch_channel(self, ref):
         if not ref.startswith("ghcr.io/") or any(c in ref for c in " ;|&$`"):
             raise ValueError("refusing image reference outside ghcr.io")
-        code, out = self.run(["bootc", "switch", ref], timeout=1800)
+        channel = ref.rsplit(":", 1)[-1] if ":" in ref.split("/")[-1] else ""
+        if channel not in ("stable", "beta"):
+            raise ValueError("only the stable and beta channels of this image")
+        code, out = self.run(HELPER + ["switch", channel], timeout=3600)
         return code == 0, out.strip()[-400:]

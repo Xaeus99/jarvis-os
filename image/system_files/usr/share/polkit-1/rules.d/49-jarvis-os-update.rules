@@ -1,0 +1,9 @@
+// JARVIS OS: the PC's admin account (group wheel, the account made in the installer) may run the fixed update
+// helper /usr/libexec/jarvis-os/os-update (check / stage / roll back, never reboots) without a password prompt,
+// because jarvisd runs it for a voice command and has no password box. It runs from jarvisd's user service, which
+// polkit may not count as the "active" desktop session (or as "local"), so the action's defaults alone would ask.
+polkit.addRule(function(action, subject) {
+    if (action.id == "os.jarvis.os-update" && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

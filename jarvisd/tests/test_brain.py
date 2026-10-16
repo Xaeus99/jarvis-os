@@ -69,14 +69,21 @@ def test_shared_v51_local_commands(rec, brain_factory):
     assert "108" in b.handle("what is 12 times 9")
 
 def test_updates(brain_factory):
-    r = Rec({("bootc", "upgrade", "--check"): (0, "Update available for ghcr.io/x/jarvis-os:stable\n  Version: 0.1.20261010\n")})
+    H = ("pkexec", "/usr/libexec/jarvis-os/os-update")
+    r = Rec({H + ("check",): (0, "Update available for ghcr.io/x/jarvis-os:stable\n  Version: 0.1.20261010\n")})
     b = brain_factory(r)
     assert "update is ready" in b.handle("check for updates")
-    assert "staged" in b.handle("update jarvis os") and r.ran("bootc", "upgrade")
+    assert "staged" in b.handle("update jarvis os") and r.ran(*H, "stage")
+    assert not r.ran("bootc")                                # bootc needs root: only ever via the pkexec helper
     assert not r.ran("systemctl", "reboot")                  # staging never reboots
 
 def test_rollback_needs_yes(rec, brain_factory):
-    b = brain_factory(rec, answer="no"); b.handle("roll back the update"); assert not rec.ran("bootc", "rollback")
+    b = brain_factory(rec, answer="no"); b.handle("roll back the update"); assert not rec.ran("pkexec", "/usr/libexec/jarvis-os/os-update", "rollback")
+
+def test_rollback_yes_uses_root_helper(rec, brain_factory):
+    b = brain_factory(rec, answer="yes")
+    assert "Rollback queued" in b.handle("roll back the update")
+    assert rec.ran("pkexec", "/usr/libexec/jarvis-os/os-update", "rollback") and not rec.ran("bootc")
 
 def test_gpu(brain_factory):
     r = Rec({("nvidia-smi",): (0, "61, 37, 2311, 8151\n")})

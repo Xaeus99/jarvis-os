@@ -22,26 +22,26 @@ Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot
 | `jarvisd/` | the Linux JARVIS daemon (Python). `jarvisd/core/` is vendored verbatim from Windows JARVIS v5.1 |
 | `windows/` | Windows-side "switch to JARVIS OS" (one-time firmware boot via bcdedit) |
 | `bootdemo/` | builds a GRUB ISO with the real theme and boots it in QEMU/OVMF for a screenshot |
-| `.github/workflows/` | nightly image build + test + push + cosign sign; manual ISO build |
+| `.github/workflows/` | nightly image build + test + push + cosign sign; installer ISO + release; boot, install, click-through, Rufus, NVIDIA and update tests |
 | `cosign.pub` | public half of the image-signing key (the private half lives only in the repo's Actions secrets) |
 | `tools/make_art.py` | regenerates wallpapers and boot art |
 
 ## Test
 
-    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 85 tests
+    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 282 tests
 
-## Status (phase 2, Oct 9 2026)
+## Status (1.0 release candidate, Oct 2026)
 
-Phase 2 adds the public repo, signed cloud builds, the first-login app installer and "restore my games".
-The image itself has not booted on real hardware yet.
+Release candidate **v1.0.0-rc1**. Every image goes through the same chain in virtual machines before it is released:
+unit tests, a signed build, a boot test to the desktop, the NVIDIA boot settings check, the voice test, the
+installer ISO booting from DVD and from a USB stick (UEFI + BIOS, and a Rufus ISO-mode stick), an unattended
+dual-boot install and a click-through install next to a dummy Windows (Windows stays byte-identical), and the
+update test (an older install receives the signed update, boots it, goes back through "previous (rollback)" in
+the boot menu, and refuses an unsigned image).
 
-### Phase 1
-
-Built and tested on a Linux build box: boot theme (real UEFI boot in QEMU), jarvisd brain + Linux hands
-(fake command runner), remote-control policy + kill switch, Qt indicator (offscreen and on a real Plasma 5
-session under Xvfb), wake word with the real openWakeWord model on synthetic speech.
-NOT yet done: the image has never been built (needs ~15 GB + podman; done in CI), nothing has run on real
-hardware, the Tab channel/HUD/workspace are not ported yet.
+**Not tested on real hardware yet**: the RTX 5060 driver and display, Secure Boot key enrollment on real firmware,
+a physical USB stick, BitLocker, real disk sizes, microphones and RGB. The first real install follows
+[docs/INSTALL_DAY_GUIDE.md](docs/INSTALL_DAY_GUIDE.md).
 
 ## Apps and games
 
