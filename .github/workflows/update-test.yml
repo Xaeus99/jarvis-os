@@ -86,13 +86,17 @@ jobs:
           tools/install_test.sh collect "$DISK" shots > shots/collect.txt 2>&1 || true
           L=$(ls shots/*jarvis-update-test.txt 2>/dev/null | head -1); P=$(ls shots/*jarvis-update-test-post.log 2>/dev/null | head -1)
           cat "$P" 2>/dev/null; grep -a "JARVIS-UPDATE-TEST" shots/serial_p*.log | cut -c1-500
-          F=${FROM#sha256:}; T=${TARGET#sha256:}; ok=1
+          T=${TARGET#sha256:}; ok=1
           g() { grep -a "JARVIS-UPDATE-TEST $1" shots/serial_$2.log | tail -1; }
+          # the installed old image's digest: what the installed system reports (the installer ISO carries a re-exported
+          # copy of $FROM, so its digest differs from the registry's)
+          F=$(g "upgrade STATUS-BEFORE" p2_upgrade | grep -o 'booted=[^ ]*' | grep -o 'sha256:[0-9a-f]*' | cut -d: -f2)
+          echo "old image as installed: ${F:-?} (registry $FROM)"; [ -n "$F" ] || F=none
           pass() { echo "PASS $*" | tee -a "$GITHUB_STEP_SUMMARY"; }
           fail() { echo "::error::$*"; echo "FAIL $*" >> "$GITHUB_STEP_SUMMARY"; ok=0; }
-          g "upgrade STATUS-BEFORE" p2_upgrade | grep -q "booted=[^ ]*$F" && pass "installed system runs the old image ${F:0:12}" || fail "boot 2 was not on the old image"
+          g "upgrade STATUS-BEFORE" p2_upgrade | grep -q "booted=[^ ]*$F" && [ "$F" != "$T" ] && pass "installed system runs the old image ($(g 'upgrade STATUS-BEFORE' p2_upgrade | grep -o 'booted=[^ ]*' | cut -d'|' -f2))" || fail "boot 2 was not on the old image"
           g "upgrade STATUS-BEFORE" p2_upgrade | grep -q "booted=$IMAGE:$CH|" && pass "it follows $IMAGE:$CH" || fail "installed system does not follow $IMAGE:$CH"
-          g "upgrade STATUS-AFTER" p2_upgrade | grep -q "staged=[^ ]*$T" && pass "bootc upgrade staged the signed update ${T:0:12}" || fail "the update was not staged"
+          g "upgrade STATUS-AFTER" p2_upgrade | grep -q "staged=[^ ]*$T" && pass "bootc upgrade staged the signed update ${T:0:12} ($(g 'upgrade STATUS-AFTER' p2_upgrade | grep -o 'staged=[^ ]*' | cut -d'|' -f2))" || fail "the update was not staged"
           g "new STATUS-BEFORE" p3_new | grep -q "booted=[^ ]*$T" && pass "after a restart the new image runs" || fail "boot 3 is not on the new image"
           g "new STATUS-BEFORE" p3_new | grep -q "rollback=[^ ]*$F" && pass "the old image is kept as rollback" || fail "no rollback entry for the old image"
           g "safe-graphics-matches-booted" p3_new | grep -q yes && pass "safe graphics entry follows the update" || fail "safe graphics entry still points at the old version"

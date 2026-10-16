@@ -53,7 +53,7 @@ jobs:
           . image/version.env
           VERSION="${JARVIS_OS_RELEASE}.$(date -u +%Y%m%d)"
           cp -r jarvisd image/jarvisd; cp cosign.pub image/cosign.pub
-          sudo podman build --build-arg JARVIS_OS_VERSION="$VERSION" --build-arg IMAGE_REPO="$IMAGE" --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" -t "$IMAGE:beta" -t "$IMAGE:$VERSION" image
+          sudo podman build --build-arg JARVIS_OS_VERSION="$VERSION" --build-arg IMAGE_REPO="$IMAGE" --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" --label org.opencontainers.image.version="$VERSION" -t "$IMAGE:beta" -t "$IMAGE:$VERSION" image
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Push
         run: |

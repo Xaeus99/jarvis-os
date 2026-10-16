@@ -34,5 +34,11 @@ lsinitrd -f etc/modprobe.d/nvidia-modeset.conf $I 2>/dev/null | sed "s/^/initram
 lsinitrd -f usr/lib/modprobe.d/90-jarvis-nvidia-kms.conf $I 2>/dev/null | grep -v "^#" | sed "s/^/initramfs modprobe: /"
 lsinitrd $I 2>/dev/null | grep -E "etc/modprobe.d/" | sed "s/^.* etc/initramfs has etc/"
 echo "## plymouth"; cat /etc/plymouth/plymouthd.conf 2>/dev/null; grep -h "^Theme\|^DeviceTimeout\|^ShowDelay" /usr/share/plymouth/plymouthd.defaults 2>/dev/null | sed "s/^/defaults: /"
+echo "## secure boot signing (the key the installer queues for enrollment vs the key the NVIDIA driver is signed with)"
+KEY=/etc/pki/akmods/certs/akmods-ublue.der; [ -f "$KEY" ] || KEY=$(find /etc/pki /usr/share -name "akmods-ublue*.der" 2>/dev/null | head -1)
+echo "enrolled key file: ${KEY:-none}"
+[ -n "$KEY" ] && openssl x509 -inform der -in "$KEY" -noout -subject -ext subjectKeyIdentifier 2>&1 | tr -d " " | sed "s/^/enrolled key: /"
+[ -n "$M" ] && echo "nvidia signer: $(modinfo -F signer "$M" 2>/dev/null | head -1) key $(modinfo -F sig_key "$M" 2>/dev/null | head -1) hash $(modinfo -F sig_hashalgo "$M" 2>/dev/null | head -1)"
+for d in nvidia-drm nvidia-modeset nvidia-uvm; do f=$(find /usr/lib/modules/$K -name "${d/-/_}.ko*" -o -name "$d.ko*" | head -1); [ -n "$f" ] && echo "$d signer key: $(modinfo -F sig_key "$f" 2>/dev/null | head -1)"; done
 echo "## display manager"; systemctl get-default 2>/dev/null; ls /etc/systemd/system/display-manager.service 2>/dev/null && readlink -f /etc/systemd/system/display-manager.service
 ' > "$OUT" 2>&1
