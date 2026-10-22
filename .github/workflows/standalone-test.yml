@@ -1,4 +1,5 @@
 # Rerun Oct 16 2026 on beta = D13 (1.0.0-rc1: voice update commands through the root helper).
+# Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24.
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
@@ -15,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: KVM + QEMU
         run: |
@@ -58,7 +59,16 @@ jobs:
           test -s shots/voice_transcript.txt || { echo "::error::nothing JARVIS said was heard on the sound card"; exit 1; }
           { echo "### What JARVIS said (from the VM's sound card)"; echo '```'; cat shots/voice_transcript.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           ffmpeg -loglevel error -y -i shots/jarvis_voice.wav -ac 1 -b:a 64k shots/jarvis_voice.mp3 && rm shots/jarvis_voice.wav
-      - uses: actions/upload-artifact@v4
+      - name: Verdict - graphics check and setup check (rc2)
+        run: |
+          S=shots/serial.log
+          tr -d '\r' < "$S" | sed -n '/==== GRAPHICS CHECK/,/==== VOICE: GRAPHICS/p' | head -80
+          tr -d '\r' < "$S" | grep -q '^GPURC=0' || { echo "::error::jarvisctl gpu check did not exit 0 (expected: no NVIDIA card in the VM)"; exit 1; }
+          grep -aq 'No NVIDIA card in this computer' "$S" || { echo "::error::the graphics check did not report the VM's missing NVIDIA card"; exit 1; }
+          tr -d '\r' < "$S" | grep -q '^SETUPRC=0' || { echo "::error::jarvisctl setup status failed"; exit 1; }
+          ! grep -aq 'Traceback' <(tr -d '\r' < "$S" | sed -n '/==== GRAPHICS CHECK/,/==== VOICE: GRAPHICS/p') || { echo "::error::a Python error in the graphics/setup check"; exit 1; }
+          echo "graphics check + setup check OK"
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
 # re-run on beta = D11 (sha256:d3afcec051e0..., NVIDIA modesetting), Oct 14

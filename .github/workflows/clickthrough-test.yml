@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: Tools (KVM, QEMU, OVMF, OCR, NTFS, GPT)
         run: |
@@ -108,6 +108,6 @@ jobs:
           cat $B >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           cat shots/verdict.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           [ $ok = 1 ]
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: "clickthrough-${{ matrix.mode }}", path: shots/ }

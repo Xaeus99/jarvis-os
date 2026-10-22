@@ -1,8 +1,24 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc1** (pre-release, beta channel). The final 1.0 gets the same notes plus its own
+> Release candidate: **v1.0.0-rc2** (pre-release, beta channel; rc1 was Oct 16). The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc2 (Oct 22)
+
+- **Newer base.** Rebuilt on this week's Bazzite (44.20261012.1, Linux kernel 7.2.9). Every test below ran again
+  on the new image.
+- **Graphics check.** At every login JARVIS checks that the NVIDIA driver is really running the RTX 5060. If not,
+  you get a notification that says why in plain words (Secure Boot key not enrolled yet, the safe graphics entry,
+  a driver that doesn't know the card) and what to do. Ask any time: "Jarvis, check my graphics card". "Fix the
+  graphics driver" queues the Secure Boot key for you (it asks first).
+- **A clearer first start.** The first login shows a **setup card**: graphics, apps, offline brain, microphone,
+  Windows, Tab link, each marked done, still going, or needs you (with the words to say). "How's setup going?"
+  reads it out.
+- **Quest headset groundwork.** "Pair my headset" is understood and the pairing-code side is ready for the VR
+  bridge; until the bridge lands it says so, and the JARVIS VR app pairs with JARVIS on Windows.
+- **Cleaner builds.** The image's own quality check (bootc lint) had two warnings; both are fixed and any new one
+  now stops the build. Build tools moved off a deprecated runtime.
 
 ## What it is
 
@@ -68,6 +84,8 @@ login, safe graphics boot), the Secure Boot + MOK install, and the update test (
 ## Only your real PC can show
 
 - The RTX 5060 actually drawing the splash, the login screen and games (the test machines have no NVIDIA card).
+  The graphics check's RTX verdicts are tested with recorded system states; in the test VM it correctly reports
+  that there is no NVIDIA card. Its first real "the 5060 is on the NVIDIA driver" will be on your PC.
 - Your motherboard's own Secure Boot and boot menu (tested on standard virtual firmware with Microsoft's keys).
 - A real USB stick written by real Rufus (we copy exactly what Rufus 4.15 does).
 - BitLocker on your real C: drive, your real disk sizes, NVMe.

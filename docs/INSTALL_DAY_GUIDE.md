@@ -107,10 +107,14 @@ after 2 minutes, still locked.)
    **Enroll MOK** > **Continue** > **Yes** > type the password **universalblue** (you won't see letters
    appear) > Enter > **Reboot**. (Tested with Secure Boot on: after this, JARVIS OS starts with Secure Boot still
    on and trusts the key that signs the NVIDIA driver.) If you miss it (it waits, but not forever) the PC still
-   starts; JARVIS OS just uses basic graphics until you redo it (text JARVIS/Tab, we'll do it together).
+   starts; JARVIS OS just uses basic graphics until you redo it: say "Jarvis, fix the graphics driver" (it asks
+   first, then opens a window for your password), restart, and do this blue screen again.
 
 **i. The JARVIS menu**: **JARVIS OS** is first, then **Windows Boot Manager**. Pick JARVIS OS. You'll see the
-arc reactor splash, then the login screen. Log in with the password from step e. Done!
+arc reactor splash, then the login screen. Log in with the password from step e. The **JARVIS OS setup** card
+opens: its **Graphics** line must say the **GeForce RTX 5060** is running on the NVIDIA driver. If it says
+anything else, it also says why and what to do; say "Jarvis, check my graphics card" any time to hear it again,
+and "how's setup going" for the rest (apps, offline brain, microphone, Windows, Tab link). Done!
 
 **j. If the screen stays black** after the JARVIS menu (no splash and no login screen for 2 minutes): hold the
 power button until the PC turns off, turn it on again, and in the JARVIS menu press the **Down arrow** until the

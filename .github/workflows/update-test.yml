@@ -19,7 +19,7 @@ jobs:
       D11: "sha256:d3afcec051e079da86b866d2b02c489c69dabaa3a449a0876c05f47f2a6848ca"   # v0.1.20261014
       D12: "sha256:0db3b1a8c55dd3d1a036416bd062449e06c00617c29a9dca35a50c2ec1a1ef88"   # v0.1.20261015 (has the safe graphics entry)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: Tools (KVM, QEMU, OVMF, NTFS, GPT, OCR)
         run: |
@@ -110,6 +110,6 @@ jobs:
             pass "Windows partitions and boot files byte-identical after install + update + rollback"; else fail "Windows changed"; fi
           echo "### update-test: $( [ $ok = 1 ] && echo PASS || echo FAIL )" >> "$GITHUB_STEP_SUMMARY"
           [ $ok = 1 ]
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: update-test, path: shots/ }

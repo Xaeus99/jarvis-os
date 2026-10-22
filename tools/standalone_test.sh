@@ -44,6 +44,12 @@ ser '(command -v kde-inhibit >/dev/null && setsid kde-inhibit --power --screenSa
 # Wayland socket (without it, it aborted and dumped core every time)
 wake() { ser 'WAYLAND_DISPLAY=wayland-0 kscreen-doctor --dpms on >/dev/null 2>&1; loginctl --no-ask-password unlock-sessions </dev/null >/dev/null 2>&1; true' 2; mon "sendkey shift"; mon "mouse_move 5 5"; sleep 1; mon "mouse_move -5 -5"; sleep 2; }
 mark "SOUND CARD"; ser 'pactl list short sinks; pactl list short sources' 3
+# rc2: the graphics check (no NVIDIA card in this VM: it must say so and exit 0), the login check's unit, the
+# first-boot setup check, and the same check asked by voice (its answer is on the sound-card transcript)
+mark "GRAPHICS CHECK"; ser 'jarvisctl gpu check; echo GPURC=$?' 8; ser 'jarvisctl gpu check --json | head -c 1500; echo' 6
+ser 'systemctl --user --no-pager status jarvis-gpu-check.service 2>&1 | head -8' 3
+mark "SETUP CHECK"; ser 'jarvisctl setup status; echo SETUPRC=$?' 12
+mark "VOICE: GRAPHICS + SETUP"; ser 'jarvisctl tell "check my graphics card"' 12; ser 'jarvisctl tell "is everything set up"' 15
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin

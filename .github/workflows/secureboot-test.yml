@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 170
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: Tools (KVM, QEMU, OVMF with Secure Boot, OCR, NTFS, GPT)
         run: |
@@ -96,6 +96,6 @@ jobs:
             pass "Windows byte-identical"; else fail "Windows changed"; fi
           echo "### secureboot-test: $( [ $ok = 1 ] && echo PASS || echo FAIL ) (installer with Secure Boot ${INSTALL_SB:-on})" >> "$GITHUB_STEP_SUMMARY"
           [ $ok = 1 ]
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: secureboot-test, path: shots/ }

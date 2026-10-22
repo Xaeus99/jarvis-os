@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: Which image
         run: |
@@ -82,10 +82,10 @@ jobs:
           rm -f "$STICK"
           { echo "### USB stick boot"; cat isoboot/usb-uefi/verdict.txt isoboot/usb-bios/verdict.txt 2>/dev/null; } | tee -a "$GITHUB_STEP_SUMMARY"
           [ $ok = 1 ]
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: iso-boot-screens, path: isoboot/ }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: env.PUB != 'yes'
         with: { name: "jarvis-os-${{ env.VERSION }}-iso", path: dist/, retention-days: 30, compression-level: 0 }
       - name: Publish only if every test of this commit passed (install, click-through, update, Secure Boot, NVIDIA, voice)

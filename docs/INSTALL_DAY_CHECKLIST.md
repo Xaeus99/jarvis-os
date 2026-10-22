@@ -33,10 +33,12 @@ For the real PC: Windows 11 + **RTX 5060**, JARVIS OS goes **next to** Windows. 
 - [ ] Blue **MOK** screen: any key > **Enroll MOK** > **Continue** > **Yes** > type `universalblue` > Enter >
       **Reboot**. (Lets the NVIDIA driver load with Secure Boot on.)
 - [ ] JARVIS menu > **JARVIS OS** > arc-reactor splash > log in.
-- [ ] Say "Jarvis, gaming check" (RTX 5060 + driver), then "set up my monitor".
+- [ ] The **setup card** opens: **Graphics** must say the **RTX 5060** runs on the NVIDIA driver (or say
+      "Jarvis, check my graphics card"). Then say "set up my monitor".
 
 **If something's off**
 - [ ] Black screen 2+ min: hold power, restart, menu > **last** entry **JARVIS OS - safe graphics**. Text Tab.
+- [ ] Slow or blurry desktop: say "check my graphics card". It names the problem and the fix.
 - [ ] Back to Windows: menu > **Windows Boot Manager** (or say "switch to Windows").
 - [ ] Windows asks for a BitLocker key: type the 48 digits from your phone (only once).
 - [ ] Bad update: menu > **previous (rollback)**, or say "roll back the update".
