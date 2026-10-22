@@ -116,7 +116,8 @@ def verdict(f):
                     "fix": "Restart and pick the normal JARVIS OS entry (not safe graphics). If it stays off, say \u201croll back the update\u201d."}
         drv = f.get("driver_version")
         return {"code": "ok", "ok": True, "headline": f"The {name} is running on the NVIDIA driver{(' ' + drv) if drv else ''}, modesetting on." +
-                (f" Secure Boot is on and the driver's key is trusted." if f.get("secure_boot") else ""), "fix": ""}
+                (f" Secure Boot is on and the driver's key is trusted." if f.get("secure_boot") else ""), "fix": "",
+                "short": f"{name.replace('NVIDIA ', '')} on the NVIDIA driver{(' ' + drv) if drv else ''}" + (", Secure Boot on." if f.get("secure_boot") else ".")}
     if safe:
         return {"code": "safe_graphics", "ok": True, "headline": f"This start is the safe graphics entry, so the NVIDIA driver is kept off on purpose and the {name} runs a basic picture.",
                 "fix": "Restart and pick \u201cJARVIS OS\u201d at the top of the boot menu for full graphics."}

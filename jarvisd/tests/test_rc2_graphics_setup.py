@@ -45,6 +45,8 @@ def test_ok_rtx5060(tmp_path):
     assert v["code"] == "ok" and v["ok"]
     assert "RTX 5060" in v["headline"] and "580.95.05" in v["headline"] and "Secure Boot is on" in v["headline"]
     assert not any(c[0] in ("journalctl", "mokutil") for c in run.calls)       # nothing else read when all is well
+    assert v["short"] == "GeForce RTX 5060 on the NVIDIA driver 580.95.05, Secure Boot on."     # the setup card's one line
+    assert setupcheck.graphics_item(v)[2] == v["short"]
 
 def test_no_nvidia_in_a_vm(tmp_path):
     v = gpucheck.check(save=False, sysfs=fake_sys(tmp_path, [("0000:00:01.0", "0x1234", "0x1111", "bochs-drm")]), proc=fake_proc(tmp_path), run=Run())

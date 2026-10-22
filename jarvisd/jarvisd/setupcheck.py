@@ -31,7 +31,7 @@ def graphics_item(gpu):
     if gpu["code"] == "no_nvidia":
         return ("Graphics", "ok", "No NVIDIA card here (a virtual machine or another GPU).", "")
     state = "ok" if gpu["code"] == "ok" else ("todo" if gpu["code"] in ("safe_graphics", "secure_boot_key") else "warn")
-    return ("Graphics", state, gpu["headline"], gpu.get("fix", ""))
+    return ("Graphics", state, gpu.get("short") or gpu["headline"], gpu.get("fix", ""))
 
 def apps_item(run, state_dir=STATE_DIR):
     if os.path.exists(os.path.join(state_dir, "apps.done")):
