@@ -168,7 +168,9 @@ journal)
   done
   loopdown; sudo chown -R "$USER" "$OUT"
   for j in "$OUT"/*.journal; do [ -f "$j" ] && journalctl --file "$j" --no-pager -o short-monotonic 2>/dev/null; done \
-    | grep -a -i -E "secure ?boot|lockdown|x\.509|mok|universal blue|ublue|akmods|graphical\.target|Linux version|NVRM|nvidia: |could not insert 'nvidia|key was rejected|verification failed|unavailable key" | sort -u | head -80 > "$OUT/journal_evidence.txt"
+    | grep -a -i -E "secure ?boot|lockdown|x\.509|mok|universal blue|ublue|akmods|graphical\.target|Linux version|NVRM|nvidia: |could not insert 'nvidia|key was rejected|verification failed|unavailable key" | sort -u | head -600 > "$OUT/journal_evidence.txt"
+  # (was head -80: with the 7.2.9 kernel the early NVIDIA/certificate lines alone passed 80, so the later
+  #  "Reached target graphical.target" line was cut and secureboot-test 39712340950 failed a boot that reached the desktop)
   cat "$OUT/journal_evidence.txt" | cut -c1-220 ;;
 collect)
   D=$1; OUT=$2; mkdir -p "$OUT"; loopup "$D"; M=/tmp/m; sudo mkdir -p $M

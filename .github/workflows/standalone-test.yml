@@ -59,17 +59,21 @@ jobs:
           test -s shots/voice_transcript.txt || { echo "::error::nothing JARVIS said was heard on the sound card"; exit 1; }
           { echo "### What JARVIS said (from the VM's sound card)"; echo '```'; cat shots/voice_transcript.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           ffmpeg -loglevel error -y -i shots/jarvis_voice.wav -ac 1 -b:a 64k shots/jarvis_voice.mp3 && rm shots/jarvis_voice.wav
-      - name: Verdict - graphics check and setup check (rc2)
+      - name: Verdict - graphics check, setup check, webcam removed (rc2/rc3)
         run: |
-          S=shots/serial.log
-          tr -d '\r' < "$S" | sed -n '/==== GRAPHICS CHECK/,/==== VOICE: GRAPHICS/p' | head -80
-          tr -d '\r' < "$S" | grep -q '^GPURC=0' || { echo "::error::jarvisctl gpu check did not exit 0 (expected: no NVIDIA card in the VM)"; exit 1; }
-          grep -aq 'No NVIDIA card in this computer' "$S" || { echo "::error::the graphics check did not report the VM's missing NVIDIA card"; exit 1; }
-          tr -d '\r' < "$S" | grep -q '^SETUPRC=0' || { echo "::error::jarvisctl setup status failed"; exit 1; }
-          ! grep -aq 'Traceback' <(tr -d '\r' < "$S" | sed -n '/==== GRAPHICS CHECK/,/==== VOICE: GRAPHICS/p') || { echo "::error::a Python error in the graphics/setup check"; exit 1; }
+          # the VM's shell wraps every command's output in terminal escape codes (OSC 3008 markers, bracketed paste):
+          # strip them first, or a line like "FACES=none" doesn't start at column 0 (rc3 run 39712340710 failed on that)
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          sed -n '/==== GRAPHICS CHECK/,/==== JARVIS LINK STATE/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -80
+          grep -q '^GPURC=0' "$S" || { echo "::error::jarvisctl gpu check did not exit 0 (expected: no NVIDIA card in the VM)"; exit 1; }
+          grep -q 'No NVIDIA card in this computer' "$S" || { echo "::error::the graphics check did not report the VM's missing NVIDIA card"; exit 1; }
+          grep -q '^SETUPRC=0' "$S" || { echo "::error::jarvisctl setup status failed"; exit 1; }
+          ! sed -n '/==== GRAPHICS CHECK/,/==== JARVIS LINK STATE/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the webcam/graphics/setup checks"; exit 1; }
           echo "graphics check + setup check OK"
-          tr -d '\r' < "$S" | grep -q '^FACES=none' || { echo "::error::a face data folder exists (webcam features were removed)"; exit 1; }
-          tr -d '\r' < "$S" | grep -q '^CAMLOG=0' || { echo "::error::jarvisd logged camera activity (webcam features were removed)"; exit 1; }
+          grep -q '^FACES=none' "$S" || { echo "::error::a face data folder exists (webcam features were removed)"; exit 1; }
+          grep -q '^CAMLOG=0' "$S" || { echo "::error::jarvisd logged camera activity (webcam features were removed)"; exit 1; }
+          grep -q "removed" shots/voice_transcript.txt || { echo "::error::'learn my face' was not answered 'That's been removed'"; exit 1; }
           echo "webcam features removed: OK"
       - uses: actions/upload-artifact@v6
         if: always()
