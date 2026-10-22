@@ -30,8 +30,8 @@ jobs:
     if: needs.gate.outputs.go == 'yes'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.11" }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 libglib2.0-0t64 espeak-ng ffmpeg
       - run: git ls-files -s | awk '$1=="100755"{print $4}' | xargs -r chmod +x; chmod +x image/build_files/*.sh image/system_files/usr/libexec/jarvis-os/* bootdemo/*.sh tools/*.py   # API commits can drop the exec bit
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release          # holds SIGNING_SECRET (the cosign private key); no approval rule
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Free disk (Bazzite NVIDIA base is ~6 GB compressed)
         uses: ublue-os/remove-unwanted-software@v9
       - run: chmod +x image/build_files/*.sh image/system_files/usr/libexec/jarvis-os/*

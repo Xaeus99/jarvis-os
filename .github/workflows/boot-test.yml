@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ublue-os/remove-unwanted-software@v9
       - name: KVM + QEMU
         run: |
@@ -47,6 +47,6 @@ jobs:
           sudo podman rmi -a -f >/dev/null 2>&1 || true
       - name: Boot it and take screenshots
         run: bash tools/boot_test.sh output/qcow2/disk.qcow2 shots
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with: { name: boot-test-screens, path: shots/ }
