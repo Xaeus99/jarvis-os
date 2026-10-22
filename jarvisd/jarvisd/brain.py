@@ -205,25 +205,10 @@ class LinuxBrain:
         return self.say(f"Your latest clip, {s}.")
 
     def camera_action(self, k):
-        s, cam = self.sir, getattr(self, "camera", None)
-        if cam is None:
-            from . import camera as camglue
-            if not camglue.available():
-                return self.say(f"The camera greeting isn't available on this system yet, {s}: the vision add-on is missing.")
-            if k == "camera_off":
-                return self.say(f"Camera greeting is already off, {s}.")
-            return self.say(f"I don't have a camera to look through yet, {s}. Plug in a webcam and ask me again."
-                            if not camglue.has_device() else f"The camera greeting is switched off in my settings, {s}.")
-        if k == "learn_face":
-            self.say(f"Look straight at the camera and hold still for about ten seconds, {s}.")
-            ok, msg = cam.enroll()
-            return self.say(msg)
-        if k == "forget_face":
-            cam.book.forget()
-            return self.say(f"Done, {s}. Your face data is deleted; I'll greet anyone at this desk again.")
-        on = k == "camera_on"
-        (cam.enabled.set if on else cam.enabled.clear)()
-        return self.say(f"Camera greeting {'on' if on else 'off'}, {s}.")
+        """Webcam features were removed (1.0.0-rc2); the old phrases get a plain answer and any saved face data goes."""
+        from . import camera
+        camera.purge_face_data(self.state_dir)
+        return self.say(camera.removed_line(self.sir))
 
     def say(self, text):
         self.spoken.append(text); self._say(text); return text

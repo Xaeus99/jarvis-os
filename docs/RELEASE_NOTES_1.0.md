@@ -15,6 +15,9 @@
 - **A clearer first start.** The first login shows a **setup card**: graphics, apps, offline brain, microphone,
   Windows, Tab link, each marked done, still going, or needs you (with the words to say). "How's setup going?"
   reads it out.
+- **Webcam features removed.** At your request, the "welcome back" camera greeting, "learn my face" and "forget my
+  face" are gone, and any face data an older version saved is deleted when JARVIS starts. Nothing in JARVIS OS opens
+  your webcam now. Asking for those old commands gets "That's been removed, sir."
 - **Quest headset groundwork.** "Pair my headset" is understood and the pairing-code side is ready for the VR
   bridge; until the bridge lands it says so, and the JARVIS VR app pairs with JARVIS on Windows.
 - **Cleaner builds.** The image's own quality check (bootc lint) had two warnings; both are fixed and any new one

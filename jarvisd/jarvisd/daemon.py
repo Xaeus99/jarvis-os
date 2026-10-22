@@ -188,17 +188,16 @@ def main():
         try: brain.studio.warm()
         except Exception as e: log.info("OBS warm-up: %r", e)
     threading.Thread(target=warm_obs, name="obs-warm", daemon=True).start()
-    try:                                  # games: HUD stays out of the way, camera greeting pauses, auto game mode
+    try:                                  # games: HUD stays out of the way, auto game mode
         from . import gamewatch
         brain.gamewatch = gamewatch.wire(cfg, brain.run, hud=hud).start()
     except Exception as e:
         log.info("game watcher unavailable: %r", e)
-    try:                                  # "welcome back, sir" (paused in games and while OBS/Discord use the webcam)
+    try:                                  # webcam features were removed in 1.0.0-rc2: delete any face data an older version saved
         from . import camera
-        gw = getattr(brain, "gamewatch", None)
-        brain.camera = camera.start(cfg, brain, speak, is_gaming=lambda: bool(gw and gw.gaming))
+        camera.purge_face_data(brain.state_dir)
     except Exception as e:
-        log.info("camera greeting unavailable: %r", e)
+        log.info("face data cleanup: %r", e)
     _, listener = wire_tab(cfg, brain, speak, brain.state_dir)
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone

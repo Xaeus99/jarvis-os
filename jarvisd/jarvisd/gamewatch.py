@@ -11,7 +11,6 @@ another's window, so JARVIS OS looks at what is observable instead:
 
 What JARVIS does with it (same as Windows, plus JARVIS OS's game mode):
   - the HUD ring stays hidden in games except while JARVIS listens/answers (hud.json "game");
-  - the camera greeting pauses;
   - optional auto game mode (gamewatch.auto_game_mode, default on): performance power profile while a game runs,
     back to normal afterwards, only if JARVIS switched it on itself.
 """
