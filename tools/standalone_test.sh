@@ -50,6 +50,9 @@ mark "GRAPHICS CHECK"; ser 'jarvisctl gpu check; echo GPURC=$?' 8; ser 'jarvisct
 ser 'systemctl --user --no-pager status jarvis-gpu-check.service 2>&1 | head -8' 3
 mark "SETUP CHECK"; ser 'jarvisctl setup status; echo SETUPRC=$?' 12
 mark "VOICE: GRAPHICS + SETUP"; ser 'jarvisctl tell "check my graphics card"' 12; ser 'jarvisctl tell "is everything set up"' 15
+# rc3: webcam features are removed: the old phrase gets "That's been removed", no face data folder, no camera thread
+mark "WEBCAM REMOVED"; ser 'jarvisctl tell "learn my face"' 8; ser 'test -e ~/.local/state/jarvis/faces && echo FACES=present || echo FACES=none' 2
+ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -ciE "camera greeting|FaceWatcher|VideoCapture" | sed "s/^/CAMLOG=/"' 4
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin

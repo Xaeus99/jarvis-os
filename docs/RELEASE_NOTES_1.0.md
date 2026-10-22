@@ -1,10 +1,11 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc2** (pre-release, beta channel; rc1 was Oct 16). The final 1.0 gets the same notes plus its own
+> Release candidate: **v1.0.0-rc3** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22: rc3 is rc2 plus the
+> webcam features removed). The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
 
-## New in rc2 (Oct 22)
+## New in rc2 and rc3 (Oct 22)
 
 - **Newer base.** Rebuilt on this week's Bazzite (44.20261012.1, Linux kernel 7.2.9). Every test below ran again
   on the new image.

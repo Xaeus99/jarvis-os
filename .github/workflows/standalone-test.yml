@@ -1,5 +1,5 @@
 # Rerun Oct 16 2026 on beta = D13 (1.0.0-rc1: voice update commands through the root helper).
-# Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24.
+# Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24. (rc3: webcam features removed check.)
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
@@ -68,6 +68,9 @@ jobs:
           tr -d '\r' < "$S" | grep -q '^SETUPRC=0' || { echo "::error::jarvisctl setup status failed"; exit 1; }
           ! grep -aq 'Traceback' <(tr -d '\r' < "$S" | sed -n '/==== GRAPHICS CHECK/,/==== VOICE: GRAPHICS/p') || { echo "::error::a Python error in the graphics/setup check"; exit 1; }
           echo "graphics check + setup check OK"
+          tr -d '\r' < "$S" | grep -q '^FACES=none' || { echo "::error::a face data folder exists (webcam features were removed)"; exit 1; }
+          tr -d '\r' < "$S" | grep -q '^CAMLOG=0' || { echo "::error::jarvisd logged camera activity (webcam features were removed)"; exit 1; }
+          echo "webcam features removed: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
