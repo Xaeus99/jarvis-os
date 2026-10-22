@@ -14,7 +14,7 @@ rpm -q openrgb || echo "WARN: openrgb not installed from repos; jarvisd falls ba
 # 3. The JARVIS daemon in its own venv under /usr/lib (read-only at runtime, replaced atomically by updates)
 # Pinned Python 3.11 (the version jarvisd is tested on) via uv, independent of Fedora's system Python.
 python3 -m venv /tmp/uvenv && /tmp/uvenv/bin/pip install --no-cache-dir uv
-export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1
+export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1 UV_LINK_MODE=copy   # copy: the build's cache and /usr are different filesystems
 /tmp/uvenv/bin/uv venv --python 3.11 /usr/lib/jarvis-os/venv
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python \
     "onnxruntime>=1.17,<2" "faster-whisper>=1.0.3" "sounddevice>=0.4.6" "scipy>=1.10" tqdm requests "scikit-learn>=1.3" \
@@ -24,7 +24,9 @@ export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python --no-deps "openwakeword==0.6.0"
 # Offline from the first boot: the speech-to-text model and JARVIS's voice ship in the image (~200 MB);
 # only the optional offline chat model (Ollama, a few GB) is downloaded later, into the person's home folder.
-HF_HOME=/tmp/hf /usr/lib/jarvis-os/venv/bin/python - <<'EOF'
+HF_HOME=/tmp/hf HF_HUB_VERBOSITY=error /usr/lib/jarvis-os/venv/bin/python - <<'EOF'
+import warnings
+warnings.filterwarnings("ignore", message=".*local_dir_use_symlinks.*")   # faster-whisper still passes the retired argument
 from faster_whisper import download_model
 p = download_model("base.en", output_dir="/usr/lib/jarvis-os/models/whisper/base.en")
 print("whisper base.en ->", p)
@@ -43,7 +45,7 @@ cd /usr/lib/jarvis-os && exec /usr/lib/jarvis-os/venv/bin/python -m jarvisd "$@"
 EOF
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
-systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-ollama.service jarvis-ai-setup.service
+systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-gpu-check.service jarvis-ollama.service jarvis-ai-setup.service
 systemctl enable jarvis-grub-theme.service jarvis-boot-names.service jarvis-safe-graphics.service
 
 # 4b. Look: JARVIS colours by default for every user (merged into, not replacing, the distro's kdeglobals);
@@ -130,3 +132,9 @@ lsinitrd "/usr/lib/modules/$KVERS/initramfs.img" | grep -E 'plymouth/themes/jarv
 lsinitrd -f usr/lib/modprobe.d/90-jarvis-nvidia-kms.conf "/usr/lib/modules/$KVERS/initramfs.img" | grep -q "nvidia-drm modeset=1" \
   || { echo "NVIDIA modeset option missing from the initramfs"; exit 1; }
 echo "NVIDIA modeset option is in the initramfs"
+
+# 11. Leave nothing behind that a bootc system mustn't carry: package-manager state in /var (bootc copies /var only
+#     at the first install, so files there would go stale and trip `bootc container lint`) and runtime-only /run.
+#     The Containerfile runs the lint with --fatal-warnings, so a new warning fails the build instead of scrolling by.
+dnf5 clean all >/dev/null 2>&1 || true
+rm -rf /var/lib/dnf/repos /run/dnf

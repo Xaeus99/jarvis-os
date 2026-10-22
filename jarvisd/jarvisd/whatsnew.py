@@ -12,9 +12,9 @@ SEEN = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.loca
 LINES = [
     ("JARVIS is the operating system now", "Same voice, same Tab link, on Linux. Say \u201cswitch to Windows\u201d whenever you need it."),
     ("Workspace: Ctrl+Shift+J", "Clock, weather, PC stats, music, clips and history. Or say \u201copen the workspace\u201d."),
-    ("Streaming", "\u201cGo live\u201d \u00b7 \u201cClip that\u201d \u00b7 \u201cSwitch to the gameplay scene\u201d \u00b7 \u201cStart recording\u201d"),
-    ("Game aware", "The HUD stays out of your games, and game mode switches itself on while you play."),
+    ("Streaming & games", "\u201cGo live\u201d \u00b7 \u201cClip that\u201d \u00b7 switch scenes. The HUD stays out of your games and game mode turns itself on."),
     ("Updates you can undo", "Signed updates install on their own; \u201croll back the update\u201d undoes the last one."),
+    ("Graphics check", "I check the NVIDIA driver at every login and tell you how to fix it. Ask: \u201ccheck my graphics card\u201d."),
     ("Safe by default", "Restarting, switching to Windows and Tab taking control always ask first. Meta+Shift+Esc takes it back."),
 ]
 SPOKEN = ("I'm the operating system now, sir. Control shift J opens the workspace; say go live, clip that, or switch scenes "
@@ -55,13 +55,28 @@ def make_card(version=None, seconds=60):
     card.place()
     return card
 
+SETUP_SUBTITLE = "Welcome to JARVIS OS, sir. Here's where setup stands."
+
+def make_setup_card(version=None, its=None, seconds=90):
+    """The very first login: the setup check (setupcheck) in the what's-new card's layout."""
+    from . import setupcheck
+    card = make_card(version, seconds=seconds)
+    card.lines = setupcheck.card_lines(its if its is not None else setupcheck.items())
+    card.title = "JARVIS OS setup"        # the version is in the footer: the title line has room for ~20 characters
+    card.subtitle = SETUP_SUBTITLE
+    card.kicker = "FIRST START"
+    card.footer = "Ask \u201chow's setup going\u201d any time." + (f"  \u00b7  {version.split('.20')[0]}" if version else "")
+    return card
+
 def maybe_show(QtCore, delay_ms=2500, version=None, seen_path=SEEN):
-    """Called by the HUD process at login. Returns the card (keep a reference) or None."""
+    """Called by the HUD process at login. Returns the card (keep a reference) or None.
+    First login ever (nothing seen yet): the setup card. First login after an update: what's new."""
     version = version or os_version()
     if not should_show(version, seen_path):
         return None
+    first = not os.path.exists(seen_path)
     try:
-        card = make_card(version)
+        card = make_setup_card(version) if first else make_card(version)
     except Exception as e:
         log.info("what's new card unavailable: %r", e)
         return None

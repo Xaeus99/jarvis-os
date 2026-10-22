@@ -53,6 +53,16 @@ def parse_os(low):
         kind = "stream" if "stream" in t else "game"
         off = bool(re.search(r"\b(off|end|stop|exit|leave)\b", t))
         return "mode", {"kind": kind, "on": not off}
+    if F(r"(?:fix|repair) (?:the |my )?(?:graphics|gpu|nvidia)(?: card)?(?: driver)?|enroll (?:the )?secure ?boot key", t):
+        return "gpu_fix", {}
+    if F(r"(?:check|test) (?:the |my )?(?:graphics|gpu|nvidia|video)(?: card| driver)*|(?:graphics|gpu|nvidia|driver) check|"
+         r"is (?:the |my )?(?:graphics card|gpu|nvidia driver|graphics driver) (?:working|ok|okay|running)", t):
+        return "gpu_check", {}
+    if F(r"how(?:'s| is) (?:the )?setup (?:going|coming along)|(?:show )?(?:the )?setup (?:status|check|progress)|"
+         r"is everything (?:set up|ready)|(?:did|has) (?:the )?setup finish(?:ed)?", t):
+        return "setup_status", {}
+    if F(r"pair (?:my |the |a )?(?:quest|vr|meta quest)?(?: ?headset| ?quest)|connect (?:my |the )?(?:quest|vr headset|headset)", t):
+        return "pair_headset", {}
     if F(r"(?:run a |do a )?(?:gaming|game) (?:check|checkup|status)|check my (?:gaming )?(?:setup|rig|pc for gaming)|is my pc ready (?:for|to) (?:game|gaming|stream|streaming)", t):
         return "gaming_check", {}
     if F(r"(?:set up|fix|optimi[sz]e) my (?:monitor|display|screen)s?|(?:max|maximum|highest) refresh(?: rate)?|turn on (?:vrr|adaptive sync|g-?sync|freesync)", t):
@@ -393,6 +403,31 @@ class LinuxBrain:
                 return self.say(f"Back to normal, {s}." + (f" These didn't answer: {', '.join(failed)}." if failed else ""))
             extra = " Audio latency is down, notifications are held and indexing is paused." if x["kind"] == "stream" else ""
             return self.say(f"{name} on, {s}. Performance power profile.{extra}" + (f" These didn't answer: {', '.join(failed)}." if failed else ""))
+        if action == "gpu_check":
+            from . import gpucheck
+            v = gpucheck.check(run=gpucheck.runner_adapter(self.run))
+            return self.say(gpucheck.spoken(v, sir=s))
+        if action == "gpu_fix":
+            from . import gpucheck
+            v = gpucheck.check(run=gpucheck.runner_adapter(self.run))
+            if v["code"] != "secure_boot_key":
+                return self.say(f"Nothing to fix there, {s}. " + gpucheck.spoken(v, sir=s) if v.get("ok")
+                                else f"That one isn't a Secure Boot key problem, {s}. " + gpucheck.spoken(v, sir=s))
+            if v["facts"].get("mok_pending"):
+                return self.say(f"The key is already queued, {s}. " + v["fix"])
+            if not self._confirm(f"I'll open a terminal to queue the NVIDIA key for Secure Boot; it asks for your password, then you "
+                                 f"restart and confirm it on a blue screen with the password universalblue. Go ahead, {s}?"):
+                return self.say(f"Very well, {s}. The safe graphics entry still works in the meantime.")
+            code, _ = self.run(["konsole", "--hold", "-e", *gpucheck.ENROLL_CMD], timeout=5)
+            return self.say(f"Type your password in the terminal, {s}, then restart. On the blue screen: Enroll MOK, Continue, Yes, "
+                            f"universalblue, Reboot." if code in (0, 124) else f"I couldn't open the terminal, {s}. Run ujust enroll-secure-boot-key yourself.")
+        if action == "setup_status":
+            from . import setupcheck, gpucheck
+            its = setupcheck.items(run=gpucheck.runner_adapter(self.run))
+            return self.say(setupcheck.spoken(its, sir=s))
+        if action == "pair_headset":
+            from . import vrpair
+            return self.say(vrpair.pair_line(sir=s))
         if action == "gaming_check":
             from . import gaming
             lines = gaming.gaming_check(self.run)

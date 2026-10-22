@@ -51,7 +51,7 @@ class WhatsNewCard(QtWidgets.QWidget):
         for (x, y, dx, dy) in ((q.left(), q.top(), 1, 1), (q.right(), q.top(), -1, 1), (q.left(), q.bottom(), 1, -1), (q.right(), q.bottom(), -1, -1)):
             p.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(x + dx * L, y)); p.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(x, y + dy * L))
         p.setPen(T.accent()); p.setFont(T.font("display", 11, bold=True, spacing=3))
-        p.drawText(QtCore.QRectF(28, 22, 500, 20), QtCore.Qt.AlignLeft, "SYSTEM UPGRADE COMPLETE")
+        p.drawText(QtCore.QRectF(28, 22, 500, 20), QtCore.Qt.AlignLeft, getattr(self, "kicker", None) or "SYSTEM UPGRADE COMPLETE")
         p.setPen(QtGui.QColor("#ffffff")); p.setFont(T.font("display", 22, bold=True, spacing=2))
         p.drawText(QtCore.QRectF(28, 44, 500, 36), QtCore.Qt.AlignLeft, getattr(self, "title", None) or f"J.A.R.V.I.S. MK V  ·  v{self.version}")
         p.setPen(T.light()); p.setFont(T.font("body", 14))
@@ -65,5 +65,5 @@ class WhatsNewCard(QtWidgets.QWidget):
             p.drawText(QtCore.QRectF(50, y + 18, 480, 40), QtCore.Qt.AlignLeft | QtCore.Qt.TextWordWrap, body)
             y += 52
         p.setPen(QtGui.QColor("#8aa0b0")); p.setFont(T.font("body", 12))
-        p.drawText(QtCore.QRectF(28, self.height() - 52, 330, 30), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, "Say \u201cJarvis, what can you do?\u201d or \u201chelp with timers\u201d.")
+        p.drawText(QtCore.QRectF(28, self.height() - 52, 330, 30), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, getattr(self, "footer", None) or "Say \u201cJarvis, what can you do?\u201d or \u201chelp with timers\u201d.")
         p.end()

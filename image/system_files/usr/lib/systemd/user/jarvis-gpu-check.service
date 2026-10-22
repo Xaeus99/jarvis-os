@@ -1,0 +1,13 @@
+[Unit]
+Description=JARVIS OS: graphics check at login (NVIDIA driver on the RTX card; a notification only when something is wrong)
+After=graphical-session.target plasma-workspace.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/sleep 12
+ExecStart=/usr/bin/jarvisctl gpu check --notify
+# exit 2 = a problem was found and he was told; not a unit failure
+SuccessExitStatus=2
+
+[Install]
+WantedBy=graphical-session.target

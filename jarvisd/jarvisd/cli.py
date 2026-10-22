@@ -8,6 +8,8 @@
   jarvisctl link --from-windows --bitlocker   same, when Windows is BitLocker-encrypted (asks for its 48-digit recovery key)
   jarvisctl link --code 7KQ2-M9XD-R4TB        link with a one-time code from Tab (no Windows needed)
   jarvisctl workspace [toggle|open|close|status]  the workspace panel (Ctrl+Shift+J = toggle)
+  jarvisctl gpu check [--json]                 graphics check: NVIDIA driver on the RTX card, Secure Boot key, safe graphics
+  jarvisctl setup status [--json]             first-boot setup check (graphics, apps, offline brain, mic, Windows, Tab link)
   jarvisctl --dry-run say "switch to windows" print the OS commands instead of running them"""
 from __future__ import annotations
 import argparse, json, os, sys
@@ -60,6 +62,11 @@ def main(argv=None):
     p.add_argument("what", choices=["presets", "check", "render"]); p.add_argument("args", nargs="*")
     sub.add_parser("windows", help="list the open windows (asks KWin)")
     sub.add_parser("listen", help="make the running JARVIS listen now (push-to-talk; bound to Ctrl+Shift+Space)")
+    p = sub.add_parser("gpu", help="graphics check: is the NVIDIA driver driving the RTX card (and what to do if not)")
+    p.add_argument("what", choices=["check"]); p.add_argument("--json", action="store_true")
+    p.add_argument("--notify", action="store_true", help="a desktop notification when something is wrong (the login check)")
+    p = sub.add_parser("setup", help="first-boot setup check: graphics, apps, offline brain, microphone, Windows, Tab link")
+    p.add_argument("what", choices=["status"]); p.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "ai":
         return ai_cmd(a)
@@ -69,6 +76,18 @@ def main(argv=None):
         return eta_cmd(a)
     if a.cmd == "holo":
         return holo_cmd(a)
+    if a.cmd == "gpu":
+        from . import gpucheck
+        v = gpucheck.check()
+        print(json.dumps(v, indent=1) if a.json else v["headline"] + (("\n" + v["fix"]) if v.get("fix") else ""))
+        if a.notify:
+            gpucheck.notify(v)
+        return 0 if v.get("ok") else 2
+    if a.cmd == "setup":
+        from . import setupcheck
+        its = setupcheck.items()
+        print(json.dumps([dict(zip(("item", "state", "words", "fix"), i)) for i in its], indent=1) if a.json else setupcheck.text(its))
+        return 0
     if a.cmd == "windows":
         from . import kwin
         try:

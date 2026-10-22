@@ -28,4 +28,5 @@ LABEL org.opencontainers.image.title="JARVIS OS" \
       org.opencontainers.image.description="J.A.R.V.I.S. desktop on Bazzite: KDE Plasma, Steam/Proton, NVIDIA open drivers" \
       containers.bootc="1"
 
-RUN bootc container lint
+# --fatal-warnings: rc2 cleared the last two warnings (dnf state in /var and /run), so any new one fails the build
+RUN bootc container lint --fatal-warnings
