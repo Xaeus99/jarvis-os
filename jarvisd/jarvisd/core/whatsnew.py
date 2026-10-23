@@ -28,7 +28,40 @@ class WhatsNewCard(QtWidgets.QWidget):
         if seconds:
             QtCore.QTimer.singleShot(int(seconds * 1000), self.close)
 
+    # Row layout: each row is a title line plus its body, wrapped to the body width. A row is as tall as its
+    # body needs (never less than the classic 52 px step), and the card grows to fit every row, so a body that
+    # wraps to two or three lines no longer runs into the next row's title.
+    TOP, BODY_W, ROW_MIN, TITLE_H, ROW_GAP, BOTTOM = 118, 480, 52, 18, 12, 75
+
+    def rows(self):
+        """[(title, body, y, body_height)] for the current lines, measured with the body font."""
+        fm = QtGui.QFontMetrics(T.font("body", 14))
+        out, y = [], self.TOP
+        for title, body in getattr(self, "lines", None) or LINES:
+            h = fm.boundingRect(QtCore.QRect(0, 0, self.BODY_W, 10000), int(QtCore.Qt.AlignLeft | QtCore.Qt.TextWordWrap), body).height()
+            h = max(h, fm.height())
+            out.append((title, body, y, h))
+            y += max(self.ROW_MIN, self.TITLE_H + h + self.ROW_GAP)
+        return out, y
+
+    def fit(self):
+        """Resize the card to its rows (never smaller than the classic 505 px) and keep the button in the corner."""
+        _, end = self.rows()
+        h = max(505, end + self.BOTTOM)
+        scr = QtGui.QGuiApplication.primaryScreen()
+        if scr:
+            h = min(h, max(505, scr.availableGeometry().height() - 40))
+        if h != self.height():
+            self.resize(self.width(), h)
+        self.btn.setGeometry(self.width() - 190, self.height() - 58, 165, 36)
+        return h
+
+    def showEvent(self, e):
+        self.fit()
+        super().showEvent(e)
+
     def place(self):
+        self.fit()
         scr = QtGui.QGuiApplication.primaryScreen()
         if scr:
             g = scr.availableGeometry()
@@ -56,14 +89,13 @@ class WhatsNewCard(QtWidgets.QWidget):
         p.drawText(QtCore.QRectF(28, 44, 500, 36), QtCore.Qt.AlignLeft, getattr(self, "title", None) or f"J.A.R.V.I.S. MK V  ·  v{self.version}")
         p.setPen(T.light()); p.setFont(T.font("body", 14))
         p.drawText(QtCore.QRectF(28, 82, 500, 22), QtCore.Qt.AlignLeft, getattr(self, "subtitle", None) or ("The quality-of-life update, sir. Less finicky, more listening." if self.version.startswith("5.0") else "More I can do myself, sir. Less waiting on Tab."))
-        y = 118
-        for title, body in getattr(self, "lines", None) or LINES:
+        rows, _ = self.rows()
+        for title, body, y, bh in rows:
             p.setPen(QtCore.Qt.NoPen); p.setBrush(T.main()); p.drawEllipse(QtCore.QPointF(36, y + 10), 4, 4)
             p.setPen(T.main()); p.setFont(T.font("display", 11, bold=True, spacing=1.5))
-            p.drawText(QtCore.QRectF(50, y, 470, 18), QtCore.Qt.AlignLeft, title.upper())
+            p.drawText(QtCore.QRectF(50, y, 470, self.TITLE_H), QtCore.Qt.AlignLeft, title.upper())
             p.setPen(QtGui.QColor("#e9f8ff")); p.setFont(T.font("body", 14))
-            p.drawText(QtCore.QRectF(50, y + 18, 480, 40), QtCore.Qt.AlignLeft | QtCore.Qt.TextWordWrap, body)
-            y += 52
+            p.drawText(QtCore.QRectF(50, y + self.TITLE_H, self.BODY_W, bh + 2), QtCore.Qt.AlignLeft | QtCore.Qt.TextWordWrap, body)
         p.setPen(QtGui.QColor("#8aa0b0")); p.setFont(T.font("body", 12))
         p.drawText(QtCore.QRectF(28, self.height() - 52, 330, 30), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, getattr(self, "footer", None) or "Say \u201cJarvis, what can you do?\u201d or \u201chelp with timers\u201d.")
         p.end()

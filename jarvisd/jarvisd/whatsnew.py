@@ -66,6 +66,8 @@ def make_setup_card(version=None, its=None, seconds=90):
     card.subtitle = SETUP_SUBTITLE
     card.kicker = "FIRST START"
     card.footer = "Ask \u201chow's setup going\u201d any time." + (f"  \u00b7  {version.split('.20')[0]}" if version else "")
+    if hasattr(card, "place"):
+        card.place()                      # re-fit: setup rows with a fix line can wrap to two lines
     return card
 
 def maybe_show(QtCore, delay_ms=2500, version=None, seen_path=SEEN):
