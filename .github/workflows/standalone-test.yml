@@ -1,5 +1,6 @@
 # Rerun Oct 16 2026 on beta = D13 (1.0.0-rc1: voice update commands through the root helper).
 # Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24. (rc3: webcam features removed check.)
+# Oct 23 2026 (1.0.0-rc4): runs again on the rc4 image D20 (setup card layout fix).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
