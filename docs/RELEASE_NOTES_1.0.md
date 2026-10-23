@@ -1,9 +1,15 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc3** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22: rc3 is rc2 plus the
-> webcam features removed). The final 1.0 gets the same notes plus its own
+> Release candidate: **v1.0.0-rc4** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23: rc4 is rc3
+> with the setup card's layout fixed). The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc4 (Oct 23)
+
+- **Setup card fits its text.** A setup line that also says what to do (for example "Say 'link to Tab'") could wrap
+  onto a second line and run into the next item. Each line now takes the room its words need and the card grows to
+  fit, so nothing overlaps. Same base as rc3 (Bazzite 44.20261012.1, Linux kernel 7.2.9: still the newest stable).
 
 ## New in rc2 and rc3 (Oct 22)
 
