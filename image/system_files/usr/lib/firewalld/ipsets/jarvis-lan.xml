@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ipset type="hash:net">
+  <short>Home network (private IPv4)</short>
+  <description>Private IPv4 ranges (RFC 1918): the only addresses allowed to reach the JARVIS VR bridge on port 8771.</description>
+  <option name="family" value="inet"/>
+  <entry>10.0.0.0/8</entry>
+  <entry>172.16.0.0/12</entry>
+  <entry>192.168.0.0/16</entry>
+</ipset>

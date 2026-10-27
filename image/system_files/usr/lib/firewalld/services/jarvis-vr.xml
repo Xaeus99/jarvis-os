@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>JARVIS VR bridge</short>
+  <description>The JARVIS VR headset app (Meta Quest) talking to JARVIS on this PC: a TLS WebSocket on the home network. JARVIS only listens after "pair my headset", only on the PC's private address, and every connection must prove a paired device secret.</description>
+  <port protocol="tcp" port="8771"/>
+</service>

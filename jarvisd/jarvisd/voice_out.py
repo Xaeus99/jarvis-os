@@ -36,6 +36,7 @@ class Speaker:
         self.length_scale = 1.0 / float(a.get("piper_speed", 1.0) or 1.0)
         self.run = run
         self.piper = None
+        self.tap = None          # callable(text, wav or None) -> True when a VR headset took the audio (vrpair.wire)
         self.lock = threading.Lock()
         self._load_piper = load_piper or self._default_load
         threading.Thread(target=self._prepare, name="voice-prep", daemon=True).start()
@@ -69,6 +70,8 @@ class Speaker:
             if self.piper is not None:
                 try:
                     data = self.render(text)
+                    if self._tapped(text, data):        # a connected headset plays it; the PC speakers stay quiet
+                        return
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                         f.write(data); path = f.name
                     try:
@@ -82,7 +85,19 @@ class Speaker:
                         os.unlink(path)
                 except Exception as e:
                     log.warning("Piper failed (%r); espeak-ng instead", e)
+            if self.piper is None:
+                self._tapped(text, None)                # the headset still shows the words
             try:
                 self.run(["espeak-ng", "-v", "en-gb", "-s", "165", text], capture_output=True, timeout=60)
             except Exception as e:
                 log.error("no voice output at all: %r", e)
+
+    def _tapped(self, text, wav):
+        tap = self.tap
+        if tap is None:
+            return False
+        try:
+            return bool(tap(text, wav))
+        except Exception as e:
+            log.warning("VR voice tap failed: %r", e)
+            return False

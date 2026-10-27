@@ -2,11 +2,12 @@
 # Built by .github/workflows/build.yml, pushed to ghcr.io/${REPO_ORG}/jarvis-os and signed with cosign.
 # Install: the ISO from disk_config/iso.toml, or `sudo bootc switch ghcr.io/<org>/jarvis-os:stable` from Bazzite.
 
-# Pinned base (bumped after a green test run). Rebased Oct 22 2026 (JARVIS OS 1.0.0-rc2):
-# ghcr.io/ublue-os/bazzite-nvidia-open:stable = 44.20261012.1, kernel 7.2.9-ogc3.1.fc44 (built 2026-10-13,
-# upstream revision 2fab72c). Previous pin (rc1): 44.20261006.1, kernel 7.2.8, sha256:fe770170e272...
+# Pinned base (bumped after a green test run). Rebased Oct 27 2026 (JARVIS OS 1.0.0-rc5):
+# ghcr.io/ublue-os/bazzite-nvidia-open:stable = 44.20261026, kernel 7.2.11-ogc4.1.fc44 (built 2026-10-26,
+# upstream revision b00fd74). Previous pins: rc2-rc4 44.20261012.1 / 7.2.9 (sha256:ed93d2158a1b...),
+# rc1 44.20261006.1 / 7.2.8 (sha256:fe770170e272...).
 # (an ARG used in FROM must come before the first FROM)
-ARG BASE_IMAGE=ghcr.io/ublue-os/bazzite-nvidia-open:stable@sha256:ed93d2158a1bcba16b226bfb3ab6391446d11466646188c800b982d709435151
+ARG BASE_IMAGE=ghcr.io/ublue-os/bazzite-nvidia-open:stable@sha256:fecc39b4b278dabd27092d0b0cad01a6ab4ce7eb07b669561150fa77dea684c7
 
 FROM scratch AS ctx
 COPY build_files /

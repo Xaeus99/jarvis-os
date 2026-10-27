@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, rgb, switchos, workshop
+from . import makers, ota, rgb, switchos, vrpair, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -61,8 +61,9 @@ def parse_os(low):
     if F(r"how(?:'s| is) (?:the )?setup (?:going|coming along)|(?:show )?(?:the )?setup (?:status|check|progress)|"
          r"is everything (?:set up|ready)|(?:did|has) (?:the )?setup finish(?:ed)?", t):
         return "setup_status", {}
-    if F(r"pair (?:my |the |a )?(?:quest|vr|meta quest)?(?: ?headset| ?quest)|connect (?:my |the )?(?:quest|vr headset|headset)", t):
-        return "pair_headset", {}
+    vr = vrpair.parse_voice(t)               # the Quest headset (VR bridge, rc5): pair / unpair / status / app link
+    if vr:
+        return {"pair": "pair_headset", "unpair": "unpair_headset", "status": "headset_status", "link": "vr_link"}[vr], {}
     if F(r"(?:run a |do a )?(?:gaming|game) (?:check|checkup|status)|check my (?:gaming )?(?:setup|rig|pc for gaming)|is my pc ready (?:for|to) (?:game|gaming|stream|streaming)", t):
         return "gaming_check", {}
     if F(r"(?:set up|fix|optimi[sz]e) my (?:monitor|display|screen)s?|(?:max|maximum|highest) refresh(?: rate)?|turn on (?:vrr|adaptive sync|g-?sync|freesync)", t):
@@ -111,6 +112,7 @@ class LinuxBrain:
         self.cfg = cfg or {}
         self.sir = self.cfg.get("address", "sir")
         self.ui = None; self.voice = None; self.pending = None
+        self.vr = None                       # the VR bridge (vrpair.wire sets it in the running daemon)
         self.state_dir = state_dir or os.path.join(os.path.expanduser("~"), ".local", "state", "jarvis")
         os.makedirs(self.state_dir, exist_ok=True)
         self.run = run or Runner()
@@ -410,9 +412,9 @@ class LinuxBrain:
             from . import setupcheck, gpucheck
             its = setupcheck.items(run=gpucheck.runner_adapter(self.run))
             return self.say(setupcheck.spoken(its, sir=s))
-        if action == "pair_headset":
-            from . import vrpair
-            return self.say(vrpair.pair_line(sir=s))
+        if action in ("pair_headset", "unpair_headset", "headset_status", "vr_link"):
+            return self.say(vrpair.handle(self, {"pair_headset": "pair", "unpair_headset": "unpair",
+                                                 "headset_status": "status", "vr_link": "link"}[action]))
         if action == "gaming_check":
             from . import gaming
             lines = gaming.gaming_check(self.run)

@@ -27,6 +27,33 @@ class DryRun:
             return 0, "Volume: 0.40"
         return 0, ""
 
+def vr_cmd(a):
+    """jarvisctl vr status|selftest|pair|unpair: asks the running voice daemon (the bridge lives there)."""
+    from . import ipc
+    if a.what in ("pair", "unpair"):
+        r = ipc.send("daemon", {"cmd": "say", "text": "pair my headset" if a.what == "pair" else "unpair my headset"})
+        print(json.dumps(r if r is not None else {"ok": False, "error": "JARVIS's voice service isn't running"}))
+        return 0 if r and r.get("ok") else 1
+    r = ipc.send("daemon", {"cmd": "vr_" + a.what}, timeout=60.0)
+    if r is None:
+        r = {"ok": False, "error": "JARVIS's voice service isn't running (systemctl --user start jarvisd)"}
+    if a.json:
+        print(json.dumps(r, indent=1))
+    elif a.what == "status":
+        if not r.get("running"):
+            print("VR bridge: not running" + (f" ({r['error']})" if r.get("error") else ""))
+        else:
+            print(f"VR bridge: {r['paired']} headset(s) paired; connected: {', '.join(r['connected']) or 'none'}")
+            print(f"LAN server: {'listening on wss://' + r['address'] if r.get('lan') else 'off (starts when you pair)'}"
+                  + (f"; pairing code live" if r.get("code_active") else ""))
+            if r.get("error"):
+                print("Last problem:", r["error"])
+    else:
+        for s_ in r.get("steps") or []:
+            print("  ok:", s_)
+        print("VR SELFTEST " + ("PASSED" if r.get("ok") else "FAILED: " + str(r.get("why") or r.get("error"))))
+    return 0 if r.get("ok") else 1
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="jarvisctl")
     ap.add_argument("--dry-run", action="store_true")
@@ -53,6 +80,8 @@ def main(argv=None):
     p.add_argument("--first-boot", action="store_true")
     p = sub.add_parser("tell", help="say something to the running JARVIS (as if spoken); it answers out loud")
     p.add_argument("text")
+    p = sub.add_parser("vr", help="the Quest headset bridge: status, selftest (a pretend headset pairs over the real server), pair, unpair")
+    p.add_argument("what", choices=["status", "selftest", "pair", "unpair"]); p.add_argument("--json", action="store_true")
     p = sub.add_parser("make", help="make code or an image locally (what \"Jarvis, write code for ...\" / \"make an image of ...\" do)")
     p.add_argument("what", choices=["code", "image", "status", "setup"]); p.add_argument("text", nargs="?", default="")
     p.add_argument("--no-viewer", action="store_true", help="don't open the JARVIS viewer")
@@ -96,6 +125,8 @@ def main(argv=None):
             return 0
         except kwin.KWinUnavailable as e:
             print("No window list:", e); return 1
+    if a.cmd == "vr":
+        return vr_cmd(a)
     if a.cmd in ("tell", "listen"):
         from . import ipc
         r = ipc.send("daemon", {"cmd": "say", "text": a.text} if a.cmd == "tell" else {"cmd": "listen"})

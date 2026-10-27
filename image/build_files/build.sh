@@ -19,7 +19,7 @@ export UV_PYTHON_INSTALL_DIR=/usr/lib/jarvis-os/python UV_NO_CACHE=1 UV_LINK_MOD
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python \
     "onnxruntime>=1.17,<2" "faster-whisper>=1.0.3" "sounddevice>=0.4.6" "scipy>=1.10" tqdm requests "scikit-learn>=1.3" \
     "numpy>=1.24" "PySide6-Essentials>=6.6,<6.12" "psutil>=5.9" "rapidfuzz>=3.0" "piper-tts>=1.3" \
-    "websocket-client>=1.6" "opencv-contrib-python-headless>=4.8,<5"
+    "websocket-client>=1.6" "opencv-contrib-python-headless>=4.8,<5" "cryptography>=42"
 # openWakeWord's tflite dependency has no wheels; jarvisd only uses its ONNX models
 /tmp/uvenv/bin/uv pip install --python /usr/lib/jarvis-os/venv/bin/python --no-deps "openwakeword==0.6.0"
 # Offline from the first boot: the speech-to-text model and JARVIS's voice ship in the image (~200 MB);
@@ -43,6 +43,25 @@ install -Dm0755 /dev/stdin /usr/bin/jarvisctl <<'EOF'
 #!/bin/sh
 cd /usr/lib/jarvis-os && exec /usr/lib/jarvis-os/venv/bin/python -m jarvisd "$@"
 EOF
+
+# 3b. Firewall for the JARVIS VR bridge (rc5): port 8771/tcp for the home network only.
+#     The desktop's default zone (Bazzite: FedoraWorkstation) already allows every port above 1024 from anywhere, so a
+#     plain "open 8771" would add nothing; instead a reject rule refuses 8771 from any source outside the jarvis-lan
+#     ipset (10/8, 172.16/12, 192.168/16) and an accept rule lets those in. Reject rules are checked before the zone's
+#     port range. The home zone gets the jarvis-vr service; the public zone gets nothing (8771 stays closed there).
+#     The service and ipset definitions are in /usr/lib/firewalld; the zone changes land in /etc/firewalld/zones.
+FWZ=$(firewall-offline-cmd --get-default-zone)
+firewall-offline-cmd --zone="$FWZ" --add-rich-rule='rule family="ipv4" priority="-100" source NOT ipset="jarvis-lan" port port="8771" protocol="tcp" reject'
+firewall-offline-cmd --zone="$FWZ" --add-rich-rule='rule family="ipv4" priority="-99" source ipset="jarvis-lan" port port="8771" protocol="tcp" accept'
+firewall-offline-cmd --zone="$FWZ" --add-rich-rule='rule family="ipv6" priority="-100" port port="8771" protocol="tcp" reject'
+if [ "$FWZ" != home ]; then firewall-offline-cmd --zone=home --add-service=jarvis-vr; fi
+FWR=$(firewall-offline-cmd --zone="$FWZ" --list-rich-rules); FWH="$(firewall-offline-cmd --zone=home --list-services) $(firewall-offline-cmd --zone=home --list-rich-rules)"
+FWP=$(firewall-offline-cmd --zone=public --list-all)
+case "$FWR" in *'source NOT ipset="jarvis-lan"'*) ;; *) echo "firewall: the LAN-only rule for 8771 is missing"; exit 1;; esac
+case "$FWH" in *jarvis-vr*|*jarvis-lan*) ;; *) echo "firewall: home zone lacks jarvis-vr"; exit 1;; esac
+case "$FWP" in *8771*|*jarvis-vr*) echo "firewall: 8771 must stay closed in the public zone"; exit 1;; esac
+rm -f /etc/firewalld/zones/*.xml.old
+echo "firewall: VR bridge port 8771 open to the home network only (default zone $FWZ, home zone)"
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
 systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-gpu-check.service jarvis-ollama.service jarvis-ai-setup.service

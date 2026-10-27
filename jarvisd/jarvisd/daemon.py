@@ -202,6 +202,21 @@ def main():
     if listener is not None:
         listener.start()          # Tab's replies are spoken even while there's no microphone
     lock = threading.Lock()                # typed commands from the workspace never overlap a spoken one
+    wbox, wlock = {}, threading.Lock()
+    def get_whisper():                     # loaded once, on first use: the mic loop or a VR headset's push-to-talk
+        with wlock:
+            if "m" not in wbox:
+                from faster_whisper import WhisperModel
+                wbox["m"] = WhisperModel(whisper_model(cfg), device="cpu", compute_type="int8")
+            return wbox["m"]
+    def stt(audio):
+        segs, _ = get_whisper().transcribe(audio.astype(np.float32) / 32768.0, language="en", beam_size=1)
+        return " ".join(s.text for s in segs)
+    try:                                   # the Quest headset bridge (rc5): idle until "pair my headset"
+        from . import vrpair
+        vrpair.wire(brain, cfg, stt=stt, lock=lock, speaker=voice)
+    except Exception as e:
+        log.info("VR bridge unavailable: %r", e)
     def typed(text):
         with lock:
             hud.thinking(text); brain.handle(text); hud.idle()
@@ -210,6 +225,12 @@ def main():
         if msg.get("cmd") == "say" and (msg.get("text") or "").strip():
             threading.Thread(target=typed, args=(msg["text"].strip(),), name="typed", daemon=True).start()
             return {"ok": True}
+        if msg.get("cmd") == "vr_status":
+            from . import vrpair
+            return vrpair.status_json(getattr(brain, "vr", None))
+        if msg.get("cmd") == "vr_selftest":
+            from . import vrpair
+            return vrpair.selftest(getattr(brain, "vr", None))
         if msg.get("cmd") == "listen":
             if "daemon" in box:
                 box["daemon"].force.set(); return {"ok": True}
@@ -221,13 +242,8 @@ def main():
     except Exception as e:
         log.info("workspace link unavailable: %r", e)
     mic = open_mic(cfg.get("mic_device"))
-    from faster_whisper import WhisperModel
-    whisper = WhisperModel(whisper_model(cfg), device="cpu", compute_type="int8")
     models = os.environ.get("JARVIS_MODELS", "/usr/lib/jarvis-os/models")
-    wake = Wake(models, cfg.get("assistant", {}), whisper)
-    def stt(audio):
-        segs, _ = whisper.transcribe(audio.astype(np.float32) / 32768.0, language="en", beam_size=1)
-        return " ".join(s.text for s in segs)
+    wake = Wake(models, cfg.get("assistant", {}), get_whisper())
     box["daemon"] = Daemon(mic, wake, stt, brain, hud=hud)
     box["daemon"].run()
 

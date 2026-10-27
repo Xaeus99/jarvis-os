@@ -129,16 +129,9 @@ def test_setup_problems(tmp_path):
     assert states["Graphics"] == "todo" and states["Apps"] == "warn" and states["Microphone"] == "todo" and states["Windows"] == "warn"
     assert "fix the graphics driver" in setupcheck.text(its)
 
-# ---- VR pairing stub ----
-def test_vr_pairing_code(tmp_path):
-    p = str(tmp_path / "vr.json")
-    rec = vrpair.begin_pairing(now=1000, path=p, ip="192.168.1.20", rng=lambda n: 42)
-    assert rec["code"] == "000042" and rec["expires"] == 1000 + vrpair.CODE_TTL_S
-    assert oct(os.stat(p).st_mode & 0o777) == "0o600"
-    assert not vrpair.check_code("000041", now=1001, path=p)
-    assert not vrpair.check_code("000042", now=1000 + vrpair.CODE_TTL_S + 1, path=p)
-    assert vrpair.check_code("000042", now=1001, path=p) and not os.path.exists(p)      # one use
-    assert "isn't on JARVIS OS yet" in vrpair.pair_line()
+# ---- VR pairing (the stub became the real bridge in rc5: tests/test_rc5_vr_bridge.py) ----
+def test_vr_bridge_is_ready():
+    assert vrpair.BRIDGE_READY and vrpair.parse_voice("pair my headset") == "pair"
 
 # ---- voice ----
 @pytest.mark.parametrize("said,action", [
