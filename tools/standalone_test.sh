@@ -13,7 +13,7 @@ qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 12288 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=/tmp/vars.fd \
   -drive file="$DISK",if=virtio,format=qcow2 \
-  -device virtio-vga -display none -nic user,model=virtio-net-pci \
+  -device virtio-vga -display none -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:18771-:8771 \
   -audiodev wav,id=snd0,path="$OUT/jarvis_voice.wav" -device intel-hda -device hda-duplex,audiodev=snd0 \
   -monitor unix:$MON,server,nowait -chardev socket,id=ser0,path=/tmp/qser.sock,server=on,wait=off,logfile="$OUT/serial.log" -serial chardev:ser0 &
 QPID=$!
@@ -54,6 +54,18 @@ mark "VOICE: GRAPHICS + SETUP"; ser 'jarvisctl tell "check my graphics card"' 12
 mark "WEBCAM REMOVED"; ser 'jarvisctl tell "learn my face"' 8; ser 'test -e ~/.local/state/jarvis/faces && echo FACES=present || echo FACES=none' 2
 ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -ciE "camera greeting|FaceWatcher|VideoCapture" | sed "s/^/CAMLOG=/"' 4
 mark "JARVIS LINK STATE"; ser 'ls ~/.config/jarvis/ 2>&1; grep -c forwarding ~/.config/jarvis/config.json 2>/dev/null || echo "no Tab link"' 2
+# rc5: the VR bridge. A pretend headset pairs over the real wss server on the VM's home-network address (selftest:
+# wrong code refused, right code pairs, reconnect with the device secret, ping; nothing left behind), then "pair my
+# headset" by voice opens port 8771 and this host - a home-network source (QEMU's 10.0.2.2) through the port forward -
+# loads the bridge's trust page over TLS through the VM's firewall. "unpair my headset" closes the port again.
+mark "VR BRIDGE"; ser 'jarvisctl vr selftest; echo VRTEST=$?' 25
+ser 'jarvisctl tell "pair my headset"' 14
+ser 'jarvisctl vr status; echo VRSTATUS=$?' 4
+VRHTTP=$(curl -sk --max-time 15 -o "$OUT/vr_trust_page.html" -w '%{http_code}' https://127.0.0.1:18771/ 2>/dev/null); echo "host -> VM port 8771 trust page: HTTP ${VRHTTP:-none}" | tee "$OUT/vr_host_check.txt"
+echo | timeout 15 openssl s_client -connect 127.0.0.1:18771 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName 2>&1 | tee -a "$OUT/vr_host_check.txt"
+ser 'timeout 10 firewall-cmd --get-default-zone </dev/null 2>&1 | head -2; timeout 10 firewall-cmd --list-rich-rules </dev/null 2>&1 | head -4' 4
+ser 'jarvisctl tell "unpair my headset"' 8
+ser 'echo VRLISTEN_AFTER_UNPAIR=$(ss -ltnH "sport = :8771" | wc -l)' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin
 # the offline brain: first login started jarvis-ai-setup.service; wait for it (VM: no GPU -> the small model)

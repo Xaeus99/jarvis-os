@@ -1,9 +1,23 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc4** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23: rc4 is rc3
-> with the setup card's layout fixed). The final 1.0 gets the same notes plus its own
+> Release candidate: **v1.0.0-rc5** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28:
+> rc5 adds the Quest headset bridge and moves to this week's Bazzite). The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc5 (Oct 28)
+
+- **Your Quest headset pairs with JARVIS OS.** Say "Jarvis, pair my headset": JARVIS says and shows a 6-digit code
+  (good for 5 minutes, one use; 5 wrong tries cancel it). Type it into the JARVIS VR app on the Quest
+  (jarvis-vr.sites.tab.bot) and the headset becomes another microphone and screen for JARVIS: hold to talk, hear his
+  answers in the headset, PC stats, music controls and a Hub of 12 shortcuts. It is the same app and the same pairing
+  as JARVIS 7.1 on Windows. On your home network it connects directly and encrypted (port 8771, first time: tap
+  "Trust my PC" in the app and accept the warning once); anywhere else it falls back to an encrypted relay.
+  "Unpair my headset" forgets it; "is my headset connected" tells you how it's connected.
+- **Firewall: home network only.** Port 8771 is open only to home-network addresses, and JARVIS only listens there
+  after you pair. Nothing else in the firewall changed.
+- **Newer base.** Rebuilt on this week's Bazzite (44.20261026, Linux kernel 7.2.11). Every test below ran again on
+  the new image.
 
 ## New in rc4 (Oct 23)
 

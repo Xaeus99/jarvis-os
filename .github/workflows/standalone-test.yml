@@ -1,6 +1,7 @@
 # Rerun Oct 16 2026 on beta = D13 (1.0.0-rc1: voice update commands through the root helper).
 # Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24. (rc3: webcam features removed check.)
 # Oct 23 2026 (1.0.0-rc4): runs again on the rc4 image D20 (setup card layout fix).
+# Oct 28 2026 (1.0.0-rc5): VR bridge verdict (selftest, 'pair my headset', host -> VM port 8771 through the firewall, unpair closes it).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
@@ -76,6 +77,20 @@ jobs:
           grep -q '^CAMLOG=0' "$S" || { echo "::error::jarvisd logged camera activity (webcam features were removed)"; exit 1; }
           grep -q "removed" shots/voice_transcript.txt || { echo "::error::'learn my face' was not answered 'That's been removed'"; exit 1; }
           echo "webcam features removed: OK"
+      - name: Verdict - VR bridge (rc5)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          sed -n '/==== VR BRIDGE/,/==== BUILT-IN COMMAND/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -60
+          cat shots/vr_host_check.txt || true
+          grep -q '^VRTEST=0' "$S" && grep -q 'VR SELFTEST PASSED' "$S" || { echo "::error::jarvisctl vr selftest failed (a pretend headset could not pair over the real server)"; exit 1; }
+          grep -q 'LAN server: listening on wss://10\.' "$S" || { echo "::error::'pair my headset' did not open the bridge on the VM's home-network address"; exit 1; }
+          grep -q 'JARVIS trusts this headset' shots/vr_trust_page.html || { echo "::error::the bridge's trust page did not load from a home-network address through the firewall"; exit 1; }
+          grep -q 'IP Address:10\.' shots/vr_host_check.txt || { echo "::error::the bridge's certificate is not for the VM's private address"; exit 1; }
+          grep -q '^VRLISTEN_AFTER_UNPAIR=0' "$S" || { echo "::error::port 8771 still listening after 'unpair my headset'"; exit 1; }
+          ! sed -n '/==== VR BRIDGE/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the VR bridge"; exit 1; }
+          grep -qi 'pairing code' shots/voice_transcript.txt || { echo "::error::JARVIS did not say a headset pairing code out loud"; exit 1; }
+          echo "VR bridge: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
