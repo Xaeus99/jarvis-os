@@ -2,6 +2,7 @@
 # Oct 22 2026 (1.0.0-rc2): graphics check + setup check verdict; actions on Node 24. (rc3: webcam features removed check.)
 # Oct 23 2026 (1.0.0-rc4): runs again on the rc4 image D20 (setup card layout fix).
 # Oct 28 2026 (1.0.0-rc5): VR bridge verdict (selftest, 'pair my headset', host -> VM port 8771 through the firewall, unpair closes it).
+#   Re-run on D22 (9be915d: unpair closes the port at once; run 40604156665 on D21 saw it close 23 s late).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
