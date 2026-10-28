@@ -231,9 +231,9 @@ def pair(brain, timer=True):
 
 def unpair(brain):
     br = getattr(brain, "vr", None); s = brain.sir
-    n = br.unpair() if br is not None else 0
     if br is not None:
-        br.stop_lan()
+        br.stop_lan()                             # port 8771 closes first, before anything that talks to the relay
+    n = br.unpair() if br is not None else 0
     return f"Headset unpaired, {s}. It can't reach me any more." if n else f"No headset was paired, {s}."
 
 

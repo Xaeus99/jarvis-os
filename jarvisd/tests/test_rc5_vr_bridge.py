@@ -636,3 +636,34 @@ def test_build_opens_8771_only_to_the_lan():
     assert "--zone=home --add-service=jarvis-vr" in sh
     assert "--zone=public --add-service=jarvis-vr" not in sh and "--add-port=8771" not in sh
     assert "cryptography" in sh                                         # the bridge's certificate needs it in the venv
+
+
+
+def test_unpair_closes_the_port_at_once_even_while_the_relay_is_streaming(tmp_path, monkeypatch):
+    """rc5 VM run 40604156665: 'unpair my headset' left 8771 listening for 23 s, because closing the relay's streaming
+    GET waited for ntfy's next keepalive. A local server that sends headers and then nothing stands in for ntfy."""
+    srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1); rport = srv.getsockname()[1]
+    held = []
+    def serve():
+        c, _ = srv.accept(); held.append(c); c.recv(4096)
+        c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\r\n")
+        time.sleep(30)
+    threading.Thread(target=serve, daemon=True).start()
+    so = socket.socket(); so.bind(("127.0.0.1", 0)); port = so.getsockname()[1]; so.close()
+    b, br, _ = wired(tmp_path, bind_ip="127.0.0.1", port=port, relay_servers=[f"http://127.0.0.1:{rport}"])
+    br.start_threads = True
+    del br.relay.start                                                  # the real relay thread this time
+    br.store.add("Quest")
+    br.start_lan(); br.relay.start()
+    for _ in range(100):
+        if br.relay.resp is not None: break
+        time.sleep(0.05)
+    assert br.relay.resp is not None                                    # the relay is inside its streaming read
+    t0 = time.time()
+    words = P.handle(b, "unpair")
+    took = time.time() - t0
+    assert "Headset unpaired" in words and took < 3, took
+    probe = socket.socket()
+    assert probe.connect_ex(("127.0.0.1", port)) != 0                   # nothing listens on the bridge port any more
+    probe.close()
+    br.stop(); srv.close()

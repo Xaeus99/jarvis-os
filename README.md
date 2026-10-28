@@ -28,7 +28,7 @@ Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot
 
 ## Test
 
-    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 362 tests
+    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 363 tests
 
 ## Status (1.0 release candidate, Oct 2026)
 

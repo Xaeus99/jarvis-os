@@ -1017,25 +1017,27 @@ class Relay:
         self.gen += 1
         r = self.resp
         if r is not None:
-            try: r.close()
-            except Exception: pass
+            self._abort(r)
         self.wake.set()
         self.start()
+
+    @staticmethod
+    def _abort(r):
+        """End the streaming GET now. r.close() alone waits for the reader thread's buffer lock, i.e. until ntfy's next
+        keepalive (seen in the rc5 VM test: "unpair my headset" took 23 s), so shut the socket down first; that wakes the
+        reader at once, and the close runs on its own thread."""
+        try:
+            r.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        def close():
+            try: r.close()
+            except Exception: pass
+        threading.Thread(target=close, daemon=True, name="vr-relay-close").start()
 
     def start(self):
         if self.b.start_threads and (self.thread is None or not self.thread.is_alive()):
             self.thread = threading.Thread(target=self._loop, daemon=True, name="vr-relay"); self.thread.start()
-
-    def stop_lan(self):
-        """Stop listening on the LAN (the relay is separate). Used when a pairing code ran out with no headset paired,
-        so nothing stays open on port 8771 that nobody can use."""
-        s, self.server = self.server, None
-        if s is not None:
-            try: s.shutdown(socket.SHUT_RDWR)          # wakes the accept() thread; close() alone leaves the port bound
-            except Exception: pass
-            try: s.close()
-            except Exception: pass
-            log.info("VR bridge stopped listening on the LAN")
 
     def stop(self):
         self.stop_ev.set(); self.reload()
