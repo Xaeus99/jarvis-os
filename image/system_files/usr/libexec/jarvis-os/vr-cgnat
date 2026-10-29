@@ -28,8 +28,12 @@ case "${1:-}" in
     fi
     echo off ;;
   status)
+    # "on" / "off" when the running firewall and the saved (permanent) config agree, else which one has it
     if running; then
-      if fw --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1; then echo on; else echo off; fi
+      rt=off; pm=off
+      fw --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 && rt=on
+      fw --permanent --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 && pm=on
+      if [ "$rt" = "$pm" ]; then echo "$rt"; else echo "mixed (now: $rt, saved: $pm)"; fi
     else
       if timeout 30 firewall-offline-cmd --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1; then echo on; else echo off; fi
     fi ;;
