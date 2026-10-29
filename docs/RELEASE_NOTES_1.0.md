@@ -1,9 +1,26 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc5** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28:
-> rc5 adds the Quest headset bridge and moves to this week's Bazzite). The final 1.0 gets the same notes plus its own
+> Release candidate: **v1.0.0-rc6** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
+> rc6 Oct 29: rc6 adds a PAIR VR button, an opt-in CGNAT option for the headset and launchers for JARVIS's web apps).
+> The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc6 (Oct 29)
+
+- **PAIR VR button.** The workspace (Ctrl+Shift+J) has a PAIR VR button in its top bar. One click does what saying
+  "pair my headset" does: JARVIS says the 6-digit code and shows it as a notification. The button shows where things
+  stand: PAIR VR, VR CODE LIVE, VR PAIRED or VR LINKED; once a headset is paired, a click asks how it's connected.
+- **Routers that use 100.64.x.x addresses (CGNAT).** Some routers and internet providers give your home network
+  100.64.x.x addresses instead of 192.168.x.x. The headset bridge refuses those by default; if yours does that, run
+  `jarvisctl vr cgnat on` once (and `jarvisctl vr cgnat off` to undo it). It adds exactly that one range to the
+  headset port's firewall rule and nothing else. Off by default.
+- **JARVIS's web apps on the PC.** JARVIS VR, the aim trainer (with its on-device coach) and Reality Orbs now have
+  their own entries and icons in the app menu, a JARVIS APPS menu in the workspace's Quick launch panel, and voice
+  commands: "Jarvis, open the aim trainer", "Jarvis, open reality orbs". They open in your browser and work with a
+  mouse and keyboard as well as on the Quest.
+- **Same base.** Bazzite has not released a newer stable build since rc5 (still 44.20261026, Linux kernel 7.2.11).
+  Every test below ran again on the rc6 image.
 
 ## New in rc5 (Oct 28)
 
@@ -114,6 +131,8 @@ login, safe graphics boot), the Secure Boot + MOK install, and the update test (
 - A real USB stick written by real Rufus (we copy exactly what Rufus 4.15 does).
 - BitLocker on your real C: drive, your real disk sizes, NVMe.
 - Microphone and wake word in your room, HYTE RGB, speakers and Bluetooth.
+- Your Quest 3 pairing with JARVIS OS over your own home network (tested with a pretend headset over the real
+  encrypted connection in the VM), and whether your router hands out 100.64.x.x addresses (the CGNAT option).
 
 ## Known limits
 

@@ -92,7 +92,29 @@ jobs:
           ! sed -n '/==== VR BRIDGE/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the VR bridge"; exit 1; }
           grep -qi 'pairing code' shots/voice_transcript.txt || { echo "::error::JARVIS did not say a headset pairing code out loud"; exit 1; }
           echo "VR bridge: OK"
+      - name: Verdict - CGNAT option, workspace buttons, web-app launchers (rc6)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          sed -n '/==== VR CGNAT OPTION/,/==== BUILT-IN COMMAND/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -60
+          sed -n '/==== WEB APPS BY VOICE/,/==== WORKSHOP LOG/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -20
+          grep -q '^CGNAT_BEFORE=.*192\.168\.0\.0/16' "$S" && ! grep -q '^CGNAT_BEFORE=.*100\.64' "$S" || { echo "::error::the jarvis-lan ipset is not RFC 1918 only before the CGNAT option is switched on"; exit 1; }
+          grep -q '^CGNATON=0' "$S" || { echo "::error::jarvisctl vr cgnat on failed (root helper through polkit)"; exit 1; }
+          grep -q '^CGNAT_ENTRIES=.*100\.64\.0\.0/10' "$S" || { echo "::error::'cgnat on' did not add 100.64.0.0/10 to the running firewall's jarvis-lan"; exit 1; }
+          grep -q '^CGNAT_STATUS_ON: .*option.*: on; firewall: on' "$S" || { echo "::error::after 'cgnat on' the option, the running firewall and the saved config do not all say on"; exit 1; }
+          grep -q '^CGNAT_ENTRIES=.*192\.168\.0\.0/16' "$S" || { echo "::error::'cgnat on' lost the RFC 1918 ranges"; exit 1; }
+          grep -q '^CGNATOFF=0' "$S" || { echo "::error::jarvisctl vr cgnat off failed"; exit 1; }
+          ! grep -q '^CGNAT_AFTER=.*100\.64' "$S" && grep -q '^CGNAT_AFTER=.*192\.168\.0\.0/16' "$S" || { echo "::error::'cgnat off' did not restore the RFC 1918-only ipset"; exit 1; }
+          grep -q '^CGNAT_STATUS_OFF: .*option.*: off; firewall: off' "$S" || { echo "::error::after 'cgnat off' the option, the running firewall and the saved config do not all say off"; exit 1; }
+          echo "VR CGNAT option: OK"
+          grep -q '^WSBTNERR=0' "$S" || { echo "::error::the workspace's PAIR VR / JARVIS APPS button failed to load"; exit 1; }
+          grep -q '^WEBAPPS=3 ICONS=3' "$S" || { echo "::error::the web-app launchers or their icons are missing"; exit 1; }
+          grep -q '^WEBAPPLOG=[1-9]' "$S" || { echo "::error::'open the aim trainer' / 'open reality orbs' did not open a web app"; exit 1; }
+          ! sed -n '/==== VR CGNAT OPTION/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc6 checks"; exit 1; }
+          grep -qiE 'aim trainer|reality orbs' shots/voice_transcript.txt || { echo "::error::JARVIS did not say he was opening the web app"; exit 1; }
+          echo "workspace buttons + web-app launchers: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
 # re-run on beta = D11 (sha256:d3afcec051e0..., NVIDIA modesetting), Oct 14
+# rc6 gate, Oct 29: CGNAT option + workspace buttons + web-app launchers verdict
