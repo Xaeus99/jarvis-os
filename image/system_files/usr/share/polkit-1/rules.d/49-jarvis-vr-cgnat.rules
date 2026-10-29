@@ -1,0 +1,8 @@
+// JARVIS OS (1.0.0-rc6): the PC's admin account (group wheel) may run the fixed VR CGNAT helper
+// /usr/libexec/jarvis-os/vr-cgnat (adds / removes only 100.64.0.0/10 in the jarvis-lan ipset that guards the headset
+// port 8771) without a password prompt: jarvisd asks for it from its user service, which has no password box.
+polkit.addRule(function(action, subject) {
+    if (action.id == "os.jarvis.vr-cgnat" && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

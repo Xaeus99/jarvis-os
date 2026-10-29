@@ -228,6 +228,10 @@ def main():
         if msg.get("cmd") == "vr_status":
             from . import vrpair
             return vrpair.status_json(getattr(brain, "vr", None))
+        if msg.get("cmd") == "vr_cgnat":           # rc6: allow 100.64.0.0/10 home networks (jarvisctl vr cgnat on|off|status)
+            from . import vrpair
+            on = msg.get("on")
+            return vrpair.set_cgnat(getattr(brain, "vr", None), None if on is None else bool(on))
         if msg.get("cmd") == "vr_selftest":
             from . import vrpair
             return vrpair.selftest(getattr(brain, "vr", None))

@@ -248,6 +248,112 @@ def save_cfg(update, path=None):
         json.dump(cfg, f, indent=1)
     os.replace(tmp, path)
 
+class VrPairLogic:
+    """The workspace's PAIR VR button (rc6), GUI-free: its label from the voice daemon's vr_status answer, and what a
+    click says to JARVIS (exactly what saying it does: "pair my headset" speaks the code and shows it as a notification;
+    once a headset is paired, a click asks "is my headset connected")."""
+    LABELS = ("PAIR VR", "VR CODE LIVE", "VR PAIRED", "VR LINKED", "VR OFF")
+
+    @staticmethod
+    def label(st):
+        """-> (label, tooltip)"""
+        if not st or not st.get("running", st.get("ok")):
+            why = (st or {}).get("error") or "JARVIS's voice service isn't running, or VR is off in its settings"
+            return "VR OFF", f"The headset bridge isn't running ({why})."
+        if st.get("connected"):
+            how = "your home network" if "lan" in st["connected"] else "the relay"
+            return "VR LINKED", f"Your Quest is connected over {how}. Click: ask JARVIS for the headset status."
+        if st.get("code_active"):
+            return "VR CODE LIVE", "A pairing code is live (5 minutes): type it into JARVIS VR on the Quest. Click: a new code."
+        if st.get("paired"):
+            return "VR PAIRED", "A headset is paired but not connected: open JARVIS VR on the Quest. Click: headset status."
+        return "PAIR VR", ("Pair your Quest with JARVIS: JARVIS says a 6-digit code and shows it as a notification; type it into "
+                           "JARVIS VR (jarvis-vr.sites.tab.bot) on the headset. Same as saying \"pair my headset\".")
+
+    @staticmethod
+    def phrase(st):
+        """What a click says to JARVIS, or None when the bridge isn't there."""
+        if not st or not st.get("running", st.get("ok")):
+            return None
+        if st.get("paired") and not st.get("code_active"):
+            return "is my headset connected"
+        return "pair my headset"
+
+
+def add_vr_button(w, QtCore, send=None, period_ms=4000):
+    """Put the PAIR VR button in the workspace's top bar (left of the theme button; the status chips stop short of
+    the VOICE OUT selector, so it never covers them) and keep its label current from the daemon's vr_status."""
+    from .core import workspace as W
+    send = send or ipc.send
+    top = w.top
+    lay = top.layout()
+    btn = W.HudButton("PAIR VR", h=28, tip=VrPairLogic.label(None)[1])
+    # wide enough for the longest label, so the bar never re-flows when it changes
+    from PySide6 import QtGui
+    from .core import theme as T
+    fm = QtGui.QFontMetrics(T.font("display", 10, bold=True, spacing=1.5))
+    btn.setFixedSize(max(fm.horizontalAdvance(x) for x in VrPairLogic.LABELS) + 24, 28)
+    idx = lay.indexOf(top.b_theme)
+    lay.insertWidget(idx if idx >= 0 else lay.count(), btn)
+    lay.insertSpacing((idx if idx >= 0 else lay.count() - 1) + 1, 6)
+    box = {"st": None, "busy": False}
+    def poll():
+        if box["busy"]:
+            return
+        box["busy"] = True
+        def run():
+            try:
+                box["st"] = send("daemon", {"cmd": "vr_status"}, timeout=2.0)
+            except Exception:
+                box["st"] = None
+            box["busy"] = False
+        threading.Thread(target=run, daemon=True, name="vr-button-poll").start()
+    def refresh():
+        text, tip = VrPairLogic.label(box["st"])
+        if btn.text() != text:
+            btn.setText(text); btn.update()
+        btn.setToolTip(tip)
+    def clicked():
+        said = VrPairLogic.phrase(box["st"])
+        if said is None:
+            if hasattr(w, "add_log"):
+                w.add_log("system", VrPairLogic.label(box["st"])[1] + " (systemctl --user restart jarvisd)")
+            poll(); return
+        threading.Thread(target=lambda: send("daemon", {"cmd": "say", "text": said}), daemon=True, name="vr-button").start()
+        QtCore.QTimer.singleShot(1500, poll)
+    btn.clicked.connect(clicked)
+    t = QtCore.QTimer(w); t.timeout.connect(lambda: (poll(), refresh())); t.start(period_ms)
+    t2 = QtCore.QTimer(w); t2.timeout.connect(refresh); t2.start(500)
+    poll()
+    w._vr_button = btn; w._vr_timers = (t, t2)
+    return btn
+
+
+def webapps_menu_items():
+    """The quick-launch panel's JARVIS APPS menu (rc6): (label, theme icon, argv) for JARVIS's web apps."""
+    from . import webapps
+    return [(a["name"], a["desktop"][:-8], webapps.open_argv(k)) for k, a in webapps.APPS.items()]
+
+
+def add_webapps_button(w, QtWidgets, launch=None):
+    """A JARVIS APPS button in the Quick launch panel's header, beside EDIT: a menu with JARVIS VR, the aim trainer and
+    Reality Orbs (they open in the browser). A header button, not three more tiles: the v5.1 tile grid is sized for
+    two rows, and a third row would squeeze the panels under it."""
+    from PySide6 import QtGui
+    from .core import workspace as W
+    panel = w.p_launch
+    btn = W.HudButton("JARVIS APPS", h=22, tip="JARVIS VR, the aim trainer and Reality Orbs (open in your browser)")
+    menu = QtWidgets.QMenu(btn)
+    for label, icon, argv in webapps_menu_items():
+        act = menu.addAction(QtGui.QIcon.fromTheme(icon), label)
+        act.triggered.connect(lambda _=False, argv=argv: (launch or detached)(argv))
+    btn.clicked.connect(lambda: menu.popup(btn.mapToGlobal(btn.rect().bottomLeft())))
+    panel.header_widgets.insert(0, btn)       # left of EDIT
+    btn.setParent(panel); panel._place_header(); btn.show()
+    w._webapps_button, w._webapps_menu = btn, menu
+    return btn
+
+
 class HudMirror:
     """Mirrors the voice daemon's hud.json into the panel: reactor state + the conversation log."""
     def __init__(self, win, read):
@@ -326,6 +432,14 @@ def _real_window(cfg, QtWidgets, QtCore):
         return weather.panel_data(cfg.get("briefing") or {})
     w.start_data(weather_fn=weather_fn, clip_folders_fn=wsdata.clip_folders, thumbs_dir=os.path.join(STATE, "workspace", "thumbs"))
     w.top.set_chip("tab", link_chip(cfg))
+    try:
+        add_webapps_button(w, QtWidgets)
+    except Exception as e:
+        logging.getLogger("jarvisd.workspace").warning("JARVIS APPS button unavailable: %r", e)
+    try:
+        add_vr_button(w, QtCore)
+    except Exception as e:                # never let the button keep the panel from opening
+        logging.getLogger("jarvisd.workspace").warning("PAIR VR button unavailable: %r", e)
     mirror = HudMirror(w, hud.read_state)
     t = QtCore.QTimer(w); t.timeout.connect(mirror.tick); t.start(150)
     w._mirror = mirror

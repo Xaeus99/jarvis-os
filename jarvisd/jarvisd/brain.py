@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, rgb, switchos, vrpair, workshop
+from . import makers, ota, rgb, switchos, vrpair, webapps, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -64,6 +64,9 @@ def parse_os(low):
     vr = vrpair.parse_voice(t)               # the Quest headset (VR bridge, rc5): pair / unpair / status / app link
     if vr:
         return {"pair": "pair_headset", "unpair": "unpair_headset", "status": "headset_status", "link": "vr_link"}[vr], {}
+    web = webapps.parse_voice(t)             # JARVIS's web apps (rc6): "open the aim trainer", "open reality orbs"
+    if web:
+        return "web_app", {"app": web}
     if F(r"(?:run a |do a )?(?:gaming|game) (?:check|checkup|status)|check my (?:gaming )?(?:setup|rig|pc for gaming)|is my pc ready (?:for|to) (?:game|gaming|stream|streaming)", t):
         return "gaming_check", {}
     if F(r"(?:set up|fix|optimi[sz]e) my (?:monitor|display|screen)s?|(?:max|maximum|highest) refresh(?: rate)?|turn on (?:vrr|adaptive sync|g-?sync|freesync)", t):
@@ -415,6 +418,14 @@ class LinuxBrain:
         if action in ("pair_headset", "unpair_headset", "headset_status", "vr_link"):
             return self.say(vrpair.handle(self, {"pair_headset": "pair", "unpair_headset": "unpair",
                                                  "headset_status": "status", "vr_link": "link"}[action]))
+        if action == "web_app":
+            key = (x or {}).get("app")
+            argv = webapps.open_argv(key)
+            if not argv:
+                return self.say(f"I don't know that app, {s}.")
+            log.info("opening JARVIS web app %s: %s", key, argv[-1])
+            self.launch(argv)
+            return self.say(webapps.say_words(key, s))
         if action == "gaming_check":
             from . import gaming
             lines = gaming.gaming_check(self.run)

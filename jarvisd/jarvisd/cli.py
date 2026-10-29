@@ -34,6 +34,20 @@ def vr_cmd(a):
         r = ipc.send("daemon", {"cmd": "say", "text": "pair my headset" if a.what == "pair" else "unpair my headset"})
         print(json.dumps(r if r is not None else {"ok": False, "error": "JARVIS's voice service isn't running"}))
         return 0 if r and r.get("ok") else 1
+    if a.what == "cgnat":
+        mode = (a.mode or "status").lower()
+        if mode not in ("on", "off", "status"):
+            print("usage: jarvisctl vr cgnat on|off|status"); return 2
+        r = ipc.send("daemon", {"cmd": "vr_cgnat", "on": {"on": True, "off": False}.get(mode)}, timeout=60.0)
+        if r is None:
+            r = {"ok": False, "error": "JARVIS's voice service isn't running (systemctl --user start jarvisd)"}
+        if a.json:
+            print(json.dumps(r, indent=1))
+        else:
+            print("VR CGNAT option (100.64.0.0/10 home networks): " + ("on" if r.get("cgnat") else "off")
+                  + (f"; firewall: {r['firewall']}" if r.get("firewall") else "")
+                  + (f"; problem: {r['error']}" if r.get("error") else ""))
+        return 0 if r.get("ok") else 1
     r = ipc.send("daemon", {"cmd": "vr_" + a.what}, timeout=60.0)
     if r is None:
         r = {"ok": False, "error": "JARVIS's voice service isn't running (systemctl --user start jarvisd)"}
@@ -46,6 +60,8 @@ def vr_cmd(a):
             print(f"VR bridge: {r['paired']} headset(s) paired; connected: {', '.join(r['connected']) or 'none'}")
             print(f"LAN server: {'listening on wss://' + r['address'] if r.get('lan') else 'off (starts when you pair)'}"
                   + (f"; pairing code live" if r.get("code_active") else ""))
+            if r.get("cgnat"):
+                print("CGNAT option: on (100.64.0.0/10 counts as the home network)")
             if r.get("error"):
                 print("Last problem:", r["error"])
     else:
@@ -80,8 +96,10 @@ def main(argv=None):
     p.add_argument("--first-boot", action="store_true")
     p = sub.add_parser("tell", help="say something to the running JARVIS (as if spoken); it answers out loud")
     p.add_argument("text")
-    p = sub.add_parser("vr", help="the Quest headset bridge: status, selftest (a pretend headset pairs over the real server), pair, unpair")
-    p.add_argument("what", choices=["status", "selftest", "pair", "unpair"]); p.add_argument("--json", action="store_true")
+    p = sub.add_parser("vr", help="the Quest headset bridge: status, selftest (a pretend headset pairs over the real server), pair, unpair, "
+                       "cgnat on|off|status (allow 100.64.x.x home networks)")
+    p.add_argument("what", choices=["status", "selftest", "pair", "unpair", "cgnat"]); p.add_argument("mode", nargs="?", default=None)
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("make", help="make code or an image locally (what \"Jarvis, write code for ...\" / \"make an image of ...\" do)")
     p.add_argument("what", choices=["code", "image", "status", "setup"]); p.add_argument("text", nargs="?", default="")
     p.add_argument("--no-viewer", action="store_true", help="don't open the JARVIS viewer")

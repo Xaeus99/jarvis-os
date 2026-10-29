@@ -62,6 +62,20 @@ case "$FWH" in *jarvis-vr*|*jarvis-lan*) ;; *) echo "firewall: home zone lacks j
 case "$FWP" in *8771*|*jarvis-vr*) echo "firewall: 8771 must stay closed in the public zone"; exit 1;; esac
 rm -f /etc/firewalld/zones/*.xml.old
 echo "firewall: VR bridge port 8771 open to the home network only (default zone $FWZ, home zone)"
+# rc6: the CGNAT option (100.64.0.0/10) is OFF in the image; only `jarvisctl vr cgnat on` (root helper vr-cgnat via
+#      polkit) adds that one range to jarvis-lan on his PC
+FWI=$(firewall-offline-cmd --ipset=jarvis-lan --get-entries)
+case "$FWI" in *100.64.*) echo "firewall: CGNAT (100.64.0.0/10) must be off by default"; exit 1;; esac
+case "$FWI" in *192.168.0.0/16*) ;; *) echo "firewall: jarvis-lan ipset lost its RFC 1918 ranges"; exit 1;; esac
+test -x /usr/libexec/jarvis-os/vr-cgnat
+test -s /usr/share/polkit-1/actions/os.jarvis.vr-cgnat.policy
+
+# 3c. rc6: launchers for JARVIS's web apps (JARVIS VR, aim trainer, Reality Orbs): app menu entries with original icons
+for f in jarvis-vr-web jarvis-aim-web jarvis-orbs-web; do
+  test -s "/usr/share/applications/$f.desktop"; test -s "/usr/share/icons/hicolor/scalable/apps/$f.svg"
+done
+if command -v desktop-file-validate >/dev/null; then desktop-file-validate /usr/share/applications/jarvis-*-web.desktop || true; fi
+if command -v gtk-update-icon-cache >/dev/null; then gtk-update-icon-cache -f -t /usr/share/icons/hicolor || true; fi
 
 # 4. Services: per-user daemon + indicator for every user; uinput access for ydotool
 systemctl --global enable jarvisd.service jarvis-indicator.service jarvis-hud.service jarvis-link.service ydotoold.service jarvis-first-boot-apps.service jarvis-first-login-tuning.service jarvis-gpu-check.service jarvis-ollama.service jarvis-ai-setup.service

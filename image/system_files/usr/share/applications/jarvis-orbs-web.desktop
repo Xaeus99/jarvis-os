@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=J.A.R.V.I.S. Reality Orbs
+Comment=Open Reality Orbs (mixed reality: turn your room into other worlds) in the browser
+Exec=xdg-open https://jarvis-orbs.sites.tab.bot/
+Icon=jarvis-orbs-web
+Categories=Game;
+Keywords=jarvis;orbs;mixed reality;vr;quest;
+StartupNotify=false
+# JARVIS OS 1.0.0-rc6: a launcher for one of JARVIS's web apps (they also work on a PC with mouse and keyboard)

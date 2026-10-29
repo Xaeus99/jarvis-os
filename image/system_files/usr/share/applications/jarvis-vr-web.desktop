@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=J.A.R.V.I.S. VR
+Comment=Open JARVIS VR (the Quest web app: Hub, Sabers, Garage Lab, pairing) in the browser
+Exec=xdg-open https://jarvis-vr.sites.tab.bot/
+Icon=jarvis-vr-web
+Categories=Game;
+Keywords=jarvis;vr;quest;headset;webxr;
+StartupNotify=false
+# JARVIS OS 1.0.0-rc6: a launcher for one of JARVIS's web apps (they also work on a PC with mouse and keyboard)

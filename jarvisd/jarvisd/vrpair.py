@@ -15,6 +15,8 @@ BRIDGE_READY = True
 APP_URL = V.APP_URL
 DATA = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "jarvis")
 VERSION_FILE = "/usr/lib/jarvis-os/version"
+CGNAT_HELPER = "/usr/libexec/jarvis-os/vr-cgnat"     # root helper (pkexec): adds/removes 100.64.0.0/10 in ipset jarvis-lan
+CFG_PATH = os.path.expanduser("~/.config/jarvis/config.json")
 
 _DEV = r"(?:my |the |a )?(?:vr |quest |meta quest |oculus )?(?:headset|quest(?: 3| 3s| 2| pro)?|vr|oculus)"
 
@@ -273,13 +275,73 @@ def pair_line(sir="sir", brain=None):
     return pair(brain)
 
 
+def _save_vr_cfg(key, value, path=None):
+    """Read-modify-write one key of the vr section of the person's config.json."""
+    path = path or CFG_PATH
+    try:
+        cfg = json.load(open(path))
+    except (OSError, ValueError):
+        cfg = {}
+    cfg.setdefault("vr", {})[key] = value
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=1)
+    os.replace(tmp, path)
+
+
+def set_cgnat(br, on, run=None, cfg_path=None):
+    """The CGNAT option (rc6): some routers / ISPs give the home network 100.64.x.x addresses (RFC 6598) instead of
+    192.168.x.x / 10.x.x.x, and the bridge refuses those by default. on=True lets the headset reach port 8771 from
+    100.64.0.0/10 too: the root helper adds that range to the firewall's jarvis-lan ipset (permanent + now), and the
+    bridge counts such addresses as home-network ones. on=False undoes both; on=None only reports.
+    -> {"ok", "cgnat", "firewall", "error"?}"""
+    run = run or (lambda argv: subprocess.run(argv, capture_output=True, text=True, timeout=40))
+    if on is None:
+        try:
+            p = run(["pkexec", CGNAT_HELPER, "status"])
+            fw = (p.stdout or "").strip().splitlines()[-1:] or ["unknown"]
+            fw = fw[0]
+        except Exception as e:
+            fw = f"unknown ({e})"
+        return {"ok": True, "cgnat": bool(br and br.cgnat()), "firewall": fw}
+    try:
+        p = run(["pkexec", CGNAT_HELPER, "on" if on else "off"])
+        rc, out, err = p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
+    except Exception as e:
+        rc, out, err = 127, "", str(e)
+    if rc != 0:
+        return {"ok": False, "cgnat": bool(br and br.cgnat()), "firewall": "unchanged",
+                "error": (err or out or f"helper exit {rc}")[-300:]}
+    if br is not None:
+        br.cfg["allow_cgnat"] = bool(on)
+        if br.server is not None and not br.cfg.get("bind_ip"):
+            # the listening address may change (or stop counting as home): restart the LAN server on the right one
+            br.stop_lan()
+            br.start_lan()
+    try:
+        _save_vr_cfg("allow_cgnat", bool(on), cfg_path)
+    except OSError as e:
+        log.warning("could not save vr.allow_cgnat: %s", e)
+    return {"ok": True, "cgnat": bool(on), "firewall": out.splitlines()[-1] if out else ("on" if on else "off")}
+
+
+def cgnat_words(r, sir="sir"):
+    if not r.get("ok"):
+        return f"I couldn't change that, {sir}: {r.get('error') or 'the firewall helper failed'}."
+    if r.get("cgnat"):
+        return (f"Done, {sir}. Your headset can now reach me from 100.64 addresses too, for routers that use carrier-grade NAT. "
+                f"Say pair my headset to pair.")
+    return f"Done, {sir}. The headset bridge only accepts the usual home-network addresses again."
+
+
 def status_json(br):
     if br is None:
         return {"ok": False, "running": False}
     st = br.status()
     return {"ok": True, "running": True, "paired": st["paired"], "connected": st["connected"], "lan": st["lan"],
             "address": br.address(), "port": st["port"], "code_active": st["code_active"], "cert_sha256": st["cert"],
-            "error": st["error"]}
+            "error": st["error"], "cgnat": st.get("cgnat", False)}
 
 
 # ------------------------------------------------------------------ selftest: a pretend headset over the real server

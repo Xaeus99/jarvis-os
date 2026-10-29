@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# JARVIS OS (1.0.0-rc6): the VR bridge's CGNAT option. Some routers and ISPs give the home network addresses in
+# 100.64.0.0/10 (RFC 6598, "carrier-grade NAT") instead of 192.168.x.x / 10.x.x.x / 172.16-31.x.x. Port 8771 (the
+# Quest headset bridge) is only reachable from the firewall's jarvis-lan ipset, so on such a network the headset
+# can't reach the PC. This adds (or removes) exactly that one range in jarvis-lan - permanently and right now - and
+# nothing else. Run as root through pkexec (polkit action os.jarvis.vr-cgnat).
+#   vr-cgnat on | off | status
+set -euo pipefail
+RANGE=100.64.0.0/10
+SET=jarvis-lan
+fw() { timeout 30 firewall-cmd "$@" </dev/null; }
+running() { [ "$(timeout 10 firewall-cmd --state </dev/null 2>/dev/null)" = running ]; }
+case "${1:-}" in
+  on)
+    if running; then
+      fw --permanent --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || fw --permanent --ipset="$SET" --add-entry="$RANGE" >/dev/null
+      fw --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || fw --ipset="$SET" --add-entry="$RANGE" >/dev/null
+    else
+      timeout 30 firewall-offline-cmd --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || timeout 30 firewall-offline-cmd --ipset="$SET" --add-entry="$RANGE" >/dev/null
+    fi
+    echo on ;;
+  off)
+    if running; then
+      ! fw --permanent --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || fw --permanent --ipset="$SET" --remove-entry="$RANGE" >/dev/null
+      ! fw --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || fw --ipset="$SET" --remove-entry="$RANGE" >/dev/null
+    else
+      ! timeout 30 firewall-offline-cmd --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1 || timeout 30 firewall-offline-cmd --ipset="$SET" --remove-entry="$RANGE" >/dev/null
+    fi
+    echo off ;;
+  status)
+    if running; then
+      if fw --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1; then echo on; else echo off; fi
+    else
+      if timeout 30 firewall-offline-cmd --ipset="$SET" --query-entry="$RANGE" >/dev/null 2>&1; then echo on; else echo off; fi
+    fi ;;
+  *) echo "usage: $0 on | off | status" >&2; exit 2 ;;
+esac

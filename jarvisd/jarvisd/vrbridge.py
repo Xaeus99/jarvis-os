@@ -311,9 +311,20 @@ def wav_to_ulaw16k(wav):
     return ulaw_encode(resample_pcm16(pcm, rate, RATE))
 
 # ------------------------------------------------------------------ network helpers
-def lan_ip(connect=None):
+CGNAT = ipaddress.ip_network("100.64.0.0/10")    # carrier-grade NAT / shared address space (RFC 6598): off unless asked
+
+def _home_addr(a, cgnat=False):
+    """A home-network address: RFC 1918 private (not loopback / link-local), or - only when the person switched the
+    CGNAT option on (jarvisctl vr cgnat on) - an address in 100.64.0.0/10, which some routers and ISPs hand out."""
+    if a.is_loopback or a.is_link_local:
+        return False
+    if a.version == 4 and a in CGNAT:
+        return bool(cgnat)
+    return a.is_private
+
+def lan_ip(connect=None, cgnat=False):
     """This PC's private LAN address (the one its default route uses), or None. Nothing is sent: a UDP connect()
-    only picks the route."""
+    only picks the route. With cgnat=True a 100.64.0.0/10 address counts as the home network too."""
     try:
         if connect is not None:
             ip = connect()
@@ -323,17 +334,16 @@ def lan_ip(connect=None):
                 s.connect(("10.255.255.255", 1)); ip = s.getsockname()[0]
             finally:
                 s.close()
-        a = ipaddress.ip_address(ip)
-        if a.is_private and not a.is_loopback and not a.is_link_local:
+        if _home_addr(ipaddress.ip_address(ip), cgnat):
             return ip
     except Exception:
         pass
     return None
 
-def is_lan_peer(ip):
+def is_lan_peer(ip, cgnat=False):
     try:
         a = ipaddress.ip_address(ip.split("%")[0])
-        return a.is_private and not a.is_link_local or a.is_loopback
+        return a.is_loopback or _home_addr(a, cgnat)
     except Exception:
         return False
 
@@ -638,10 +648,14 @@ class Bridge:
         live = self.connected()
         return {"paired": len(self.store.devices()), "connected": [s.transport for s in live], "ip": self.ip,
                 "port": self.port, "lan": self.server is not None, "code_active": self.code.active(),
-                "cert": cert_fingerprint(self.data), "error": self.last_error}
+                "cert": cert_fingerprint(self.data), "error": self.last_error, "cgnat": self.cgnat()}
 
     def address(self):
         return f"{self.ip}:{self.port}" if self.ip else None
+
+    def cgnat(self):
+        """True when the person allowed 100.64.0.0/10 home networks (config vr.allow_cgnat; jarvisctl vr cgnat on)."""
+        return bool(self.cfg.get("allow_cgnat"))
 
     # ---- pairing
     def start_pairing(self):
@@ -691,7 +705,7 @@ class Bridge:
     def start_lan(self):
         if self.server is not None:
             return True
-        ip = self.cfg.get("bind_ip") or lan_ip()
+        ip = self.cfg.get("bind_ip") or (lan_ip(cgnat=True) if self.cgnat() else lan_ip())
         if not ip:
             self.last_error = "no private LAN address (relay only)"; return False
         try:
@@ -739,7 +753,7 @@ class Bridge:
                 c, addr = self.server.accept()
             except OSError:
                 return
-            if not is_lan_peer(addr[0]):
+            if not is_lan_peer(addr[0], self.cgnat()):
                 c.close(); continue
             threading.Thread(target=self._serve_tls, args=(c, addr[0]), daemon=True).start()
 
