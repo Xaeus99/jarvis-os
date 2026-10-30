@@ -44,16 +44,41 @@ class _NoHud:
     def idle(self): pass
 
 class Daemon:
-    def __init__(self, source, wake, stt, brain, chime=None, max_commands=None, hud=None):
+    def __init__(self, source, wake, stt, brain, chime=None, max_commands=None, hud=None, asker=None):
         self.source, self.wake, self.stt, self.brain = source, wake, stt, brain
         self.chime = chime or (lambda: None)
         self.max_commands = max_commands
         self.hud = hud or _NoHud()
         self.heard = []
         self.force = threading.Event()        # the workspace's mic button: listen now, as if he'd said "Jarvis"
+        self.asker = asker                    # rc7: spoken "are you sure?" answers go here instead of the brain
+        self.thread = None
+
+    def drain(self):
+        """Drop microphone audio queued while JARVIS was busy or talking (it holds his own voice, not the answer)."""
+        q = getattr(self.source, "q", None)
+        if q is None:
+            return 0
+        n = 0
+        try:
+            while True:
+                q.get_nowait(); n += 1
+        except Exception:
+            return n
+
+    def listen_once(self, start_timeout_s=5.0):
+        """Record one reply right now (no wake word) and transcribe it: used for "are you sure?" questions."""
+        self.drain()
+        self.hud.listening()
+        audio = record_command(self.source, start_timeout_s=start_timeout_s)
+        try:
+            return (self.stt(audio) or "").strip() if _loud(audio) else ""   # silence: whisper would invent words
+        finally:
+            self.hud.idle()
 
     def run(self):
         n = 0
+        self.thread = threading.current_thread()
         while True:
             c = self.source.read()
             if c is None:
@@ -63,10 +88,18 @@ class Daemon:
                 self.force.clear(); fired, info = True, {}
             if not fired:
                 continue
-            self.chime(); self.hud.listening()
+            asking = bool(self.asker and self.asker.waiting())
+            if not asking:
+                self.chime()
+            self.hud.listening()
             audio = record_command(self.source, prefix=(info or {}).get("tail"))
-            text = (self.stt(audio) or "").strip()
+            text = (self.stt(audio) or "").strip() if not asking or _loud(audio) else ""
             self.wake.reset()
+            if asking or (self.asker and self.asker.waiting()):
+                if text:
+                    self.asker.offer(text, by="voice")
+                self.hud.idle()
+                continue
             if not text:
                 self.brain.say(f"I didn't catch that, {self.brain.sir}.")
                 self.hud.idle()
@@ -78,6 +111,90 @@ class Daemon:
             n += 1
             if self.max_commands and n >= self.max_commands:
                 return n
+
+
+def _loud(audio, thresh=500):
+    """Did this recording hold any speech at all (the same energy gate as record_command)?"""
+    if audio is None or not len(audio):
+        return False
+    a = audio.astype(np.float32)
+    n = len(a) // CHUNK
+    if n == 0:
+        return float(np.sqrt(np.mean(a ** 2))) > thresh
+    return bool((np.sqrt(np.mean(a[: n * CHUNK].reshape(n, CHUNK) ** 2, axis=1)) > thresh).any())
+
+
+def _words(text):
+    import re
+    return re.findall(r"[a-z0-9']+", (text or "").lower())
+
+
+class Asker:
+    """rc7: JARVIS's "are you sure?" questions get answered. Before 1.0.0-rc7 the desktop daemon gave the brain no way
+    to ask, so every confirmation on the PC (switch to Windows, restart into the BIOS, roll back, let Tab drive, fix the
+    graphics driver, restore my games ...) quietly counted as "no". Now the question is spoken and the answer comes from
+    whichever arrives first within `timeout` seconds:
+      - his voice: asked from the voice loop, JARVIS listens straight away (no wake word needed); asked while a typed
+        command runs, the voice loop is told to listen now and hands what it hears back here;
+      - typing: the next line typed in the workspace or sent with `jarvisctl tell` is the answer, not a new command.
+    Silence or anything unclear stays "no" (brain._confirm needs a clear yes). His own question echoed back by the
+    microphone is ignored."""
+    def __init__(self, say, box=None, timeout=12.0):
+        self.say, self.box, self.timeout = say, box if box is not None else {}, timeout
+        self._lock = threading.Lock()
+        self._ev = None
+        self._ans = ""
+        self._q = ""
+        self.last = None                       # (question, answer, by) of the last question, for logs and tests
+
+    def waiting(self):
+        return self._ev is not None
+
+    def _echo(self, text):
+        w = _words(text)
+        if not w:
+            return True
+        q = set(_words(self._q))
+        return len(w) >= 3 and sum(x in q for x in w) / len(w) >= 0.8
+
+    def offer(self, text, by="typed"):
+        """An answer from the voice loop or a typed line. -> True when it was taken as the answer."""
+        text = (text or "").strip()
+        with self._lock:
+            if self._ev is None or not text or self._ev.is_set():
+                return False
+            if self._echo(text):
+                log.info("confirm: ignored %r (my own question heard back)", text)
+                return False
+            self._ans, self._by = text, by
+            self._ev.set()
+            return True
+
+    def ask(self, question):
+        ev = threading.Event()
+        with self._lock:
+            self._ev, self._ans, self._q, self._by = ev, "", question or "", None
+        d = self.box.get("daemon")
+        try:
+            self.say(question)
+            if d is not None and threading.current_thread() is d.thread:
+                end = time.monotonic() + self.timeout
+                while not ev.is_set() and time.monotonic() < end:
+                    heard = d.listen_once(start_timeout_s=min(5.0, max(0.5, end - time.monotonic())))
+                    if heard:
+                        self.offer(heard, by="voice")
+            elif d is not None:
+                d.drain(); d.force.set()
+            ev.wait(self.timeout)
+            ans = self._ans
+            log.info("confirm: %r -> %r (%s)", question, ans, self._by or "no answer")
+            self.last = (question, ans, self._by)
+            return ans
+        finally:
+            with self._lock:
+                self._ev = None
+            if d is not None:
+                d.force.clear()
 
 class MicSource:
     """sounddevice (PortAudio on PipeWire) microphone, 16 kHz mono int16."""
@@ -221,8 +338,12 @@ def main():
         with lock:
             hud.thinking(text); brain.handle(text); hud.idle()
     box = {}
+    asker = Asker(brain.say, box)          # rc7: "are you sure?" questions are spoken and answered (voice or typed)
+    brain.ask = asker.ask
     def on_ipc(msg):
         if msg.get("cmd") == "say" and (msg.get("text") or "").strip():
+            if asker.offer(msg["text"].strip(), by="typed"):     # the answer to a question JARVIS just asked
+                return {"ok": True, "answered": True}
             threading.Thread(target=typed, args=(msg["text"].strip(),), name="typed", daemon=True).start()
             return {"ok": True}
         if msg.get("cmd") == "vr_status":
@@ -248,7 +369,7 @@ def main():
     mic = open_mic(cfg.get("mic_device"))
     models = os.environ.get("JARVIS_MODELS", "/usr/lib/jarvis-os/models")
     wake = Wake(models, cfg.get("assistant", {}), get_whisper())
-    box["daemon"] = Daemon(mic, wake, stt, brain, hud=hud)
+    box["daemon"] = Daemon(mic, wake, stt, brain, hud=hud, asker=asker)
     box["daemon"].run()
 
 if __name__ == "__main__":

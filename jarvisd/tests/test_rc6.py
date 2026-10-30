@@ -170,7 +170,7 @@ def test_vr_button_in_the_real_top_bar(tmp_path, monkeypatch):
     launched = []
     monkeypatch.setattr(workspace, "detached", lambda argv: launched.append(argv))
     acts = win._webapps_menu.actions()
-    assert [a.text() for a in acts] == ["JARVIS VR", "Aim Trainer", "Reality Orbs"]
+    assert [a.text() for a in acts] == ["JARVIS VR", "Aim Trainer", "Reality Orbs", "Fly Vault"]   # rc7 added Fly Vault
     acts[1].trigger()
     assert launched == [["xdg-open", "https://jarvis-aim.sites.tab.bot/"]]
     out = os.environ.get("JARVIS_SHOT")
@@ -183,9 +183,9 @@ def test_vr_button_in_the_real_top_bar(tmp_path, monkeypatch):
 
 # ================================================================ web-app launchers
 def test_web_apps_and_urls():
-    assert set(webapps.APPS) == {"vr", "aim", "orbs"}
+    assert set(webapps.APPS) == {"vr", "aim", "orbs", "fly"}           # rc7 added Fly Vault
     for k, a in webapps.APPS.items():
-        assert re.fullmatch(r"https://jarvis-(vr|aim|orbs)\.sites\.tab\.bot/", a["url"]), a["url"]
+        assert re.fullmatch(r"https://jarvis-(vr|aim|orbs|fly)\.sites\.tab\.bot/", a["url"]), a["url"]
         assert webapps.open_argv(k) == ["xdg-open", a["url"]]
     assert webapps.open_argv("nope") is None
 
@@ -227,7 +227,7 @@ def test_desktop_entries():
 
 def test_webapps_menu_items():
     items = workspace.webapps_menu_items()
-    assert [i[0] for i in items] == ["JARVIS VR", "Aim Trainer", "Reality Orbs"]
+    assert [i[0] for i in items] == ["JARVIS VR", "Aim Trainer", "Reality Orbs", "Fly Vault"]
     for label, icon, argv in items:
         assert icon.startswith("jarvis-") and icon.endswith("-web")
         assert argv[0] == "xdg-open" and argv[1].startswith("https://jarvis-")

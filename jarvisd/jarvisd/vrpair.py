@@ -469,3 +469,59 @@ def selftest(br, timeout=10):
         hooks.quiet = old_quiet
         if not had_server and not before:
             br.stop_lan()
+
+
+# ------------------------------------------------------------------ rc7: the CGNAT option by voice
+_CG = r"(?:cgnat|carrier[- ]grade (?:nat|network address translation)|100\.64(?:\.x\.x| addresses?| ip addresses?)?)"
+_CG_WHAT = r"(?:the )?(?:vr |headset |quest )?" + _CG + r"(?: mode| option| support| setting)?"
+
+
+def _cg_norm(t):
+    t = (t or "").lower().strip()
+    t = re.sub(r"[!?.,]+$", "", t)
+    t = re.sub(r"^(?:(?:hey |ok |okay )?jarvis[, ]*)", "", t)
+    t = re.sub(r"^(?:please |can you |could you |let's |lets |go ahead and )+", "", t).strip()
+    t = re.sub(r"(?: please| for me| jarvis| now)+$", "", t).strip()
+    # what speech-to-text makes of "CGNAT": "CG NAT", "C.G.N.A.T.", "c g nat", "see gee nat", "CG-NAT"
+    t = re.sub(r"\b(?:c\.? ?g\.?[ -]?n\.? ?a\.? ?t\.?|c\.? ?g\.?[ -]?nat|see gee nat|cg-nat|cgn at)(?=\W|$)", "cgnat", t)
+    t = re.sub(r"\b100 point 64\b|\b100\.64\.0\.0(?:/10)?\b", "100.64", t)
+    return t
+
+
+def parse_cgnat(text):
+    """'on' | 'off' | 'status' | None for the VR CGNAT option by voice (rc7):
+    "my router uses CGNAT", "turn on CGNAT mode", "turn off CGNAT", "is CGNAT on"."""
+    t = _cg_norm(text)
+    if "cgnat" not in t and "carrier" not in t and "100.64" not in t:
+        return None
+    F = lambda rx: re.fullmatch(rx, t)
+    NET = r"(?:my |our |the )?(?:home )?(?:router|network|internet|isp|internet provider|wi-?fi|modem)"
+    if F(NET + r" (?:doesn't|does not|don't|do not|isn't|is not) (?:use|have|on|behind|using) " + _CG + r"(?: anymore| any more)?|"
+         r"(?:turn|switch|shut) off " + _CG_WHAT + r"|(?:disable|remove|undo|stop) " + _CG_WHAT + r"|" +
+         _CG_WHAT + r" off|(?:i )?(?:don't|do not) (?:need|want) " + _CG_WHAT):
+        return "off"
+    if F(r"(?:is|are) " + _CG_WHAT + r" (?:on|enabled|active|allowed|turned on)|" + _CG_WHAT + r" status|"
+         r"(?:what(?:'s| is) )?(?:the )?status of " + _CG_WHAT + r"|(?:is|are) (?:the )?(?:vr )?(?:bridge|headset) (?:allowing|accepting) " + _CG):
+        return "status"
+    if F(NET + r" (?:uses|is using|is on|has|is behind|gives (?:me |out )?|hands out) " + _CG + r"|"
+         r"(?:i(?:'m| am) (?:on|behind)|we(?:'re| are) (?:on|behind)) " + _CG + r"|"
+         r"(?:turn|switch) on " + _CG_WHAT + r"|(?:enable|allow|activate|use) " + _CG_WHAT + r"|" + _CG_WHAT + r" on|"
+         r"(?:my )?(?:headset|quest)(?: is| has| gets| got)? (?:on )?(?:a )?100\.64(?: address| ip)?"):
+        return "on"
+    return None
+
+
+def cgnat_question(sir="sir"):
+    return (f"That lets your headset reach me from 100.64 addresses, which some routers use for the home network. Only the "
+            f"headset port opens, and only to your home network. Turn it on, {sir}?")
+
+
+def cgnat_status_words(r, sir="sir"):
+    fw = str(r.get("firewall") or "")
+    if "mixed" in fw:
+        return (f"The CGNAT option is half set, {sir}: the firewall and the saved setting disagree. Say turn off CGNAT "
+                f"to reset it, then turn it on again if you need it.")
+    on = bool(r.get("cgnat")) or bool(re.search(r"\bfirewall: on\b|^on$", fw))
+    if on:
+        return f"The CGNAT option is on, {sir}: your headset can reach me from 100.64 addresses too."
+    return f"The CGNAT option is off, {sir}. The headset bridge accepts the usual home-network addresses only."

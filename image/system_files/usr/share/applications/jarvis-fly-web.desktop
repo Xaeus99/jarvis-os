@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=J.A.R.V.I.S. Fly Vault
+Comment=Open Fly Vault (five caged fruit flies, each run by its own tiny brain sim, under a simulated-time clock) in the browser
+Exec=xdg-open https://jarvis-fly.sites.tab.bot/
+Icon=jarvis-fly-web
+Categories=Game;
+Keywords=jarvis;fly;vault;flies;brain;simulation;vr;quest;
+StartupNotify=false
+# JARVIS OS 1.0.0-rc7: a launcher for one of JARVIS's web apps (they also work on a PC with mouse and keyboard)

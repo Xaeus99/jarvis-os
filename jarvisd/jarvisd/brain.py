@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, rgb, switchos, vrpair, webapps, workshop
+from . import makers, ota, rgb, switchos, vrpair, webapps, websearch, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -61,12 +61,18 @@ def parse_os(low):
     if F(r"how(?:'s| is) (?:the )?setup (?:going|coming along)|(?:show )?(?:the )?setup (?:status|check|progress)|"
          r"is everything (?:set up|ready)|(?:did|has) (?:the )?setup finish(?:ed)?", t):
         return "setup_status", {}
+    cg = vrpair.parse_cgnat(t)               # rc7: the VR CGNAT option by voice ("my router uses CGNAT", "turn off CGNAT")
+    if cg:
+        return "vr_cgnat", {"mode": cg}
     vr = vrpair.parse_voice(t)               # the Quest headset (VR bridge, rc5): pair / unpair / status / app link
     if vr:
         return {"pair": "pair_headset", "unpair": "unpair_headset", "status": "headset_status", "link": "vr_link"}[vr], {}
     web = webapps.parse_voice(t)             # JARVIS's web apps (rc6): "open the aim trainer", "open reality orbs"
     if web:
         return "web_app", {"app": web}
+    ws = websearch.parse_voice(t)            # rc7: "search the web for ..." answered out loud with sources
+    if ws:
+        return ("web_search", {"query": ws[1]}) if ws[0] == "search" else ("search_source", {"n": ws[1]})
     if F(r"(?:run a |do a )?(?:gaming|game) (?:check|checkup|status)|check my (?:gaming )?(?:setup|rig|pc for gaming)|is my pc ready (?:for|to) (?:game|gaming|stream|streaming)", t):
         return "gaming_check", {}
     if F(r"(?:set up|fix|optimi[sz]e) my (?:monitor|display|screen)s?|(?:max|maximum|highest) refresh(?: rate)?|turn on (?:vrr|adaptive sync|g-?sync|freesync)", t):
@@ -267,6 +273,31 @@ class LinuxBrain:
                             f"without the internet, or \u201cwhat can you do\u201d for my built-in commands.")
         return self.say(f"I can't do that one offline, {s}. Say \u201cwhat can you do\u201d for my local commands.")
 
+    def web_search(self, query):
+        """rc7: "search the web for ..." -> DuckDuckGo + the offline brain, spoken with its sources (websearch.py)."""
+        s = self.sir
+        if not query.strip():
+            return self.say(f"Search for what, {s}?")
+        self.say(f"Searching the web, {s}.")
+        ws = getattr(self, "searcher", None) or websearch.WebSearch(self.ai, in_game=self.is_gaming,
+                                                                     state=getattr(self, "search_state", None))
+        try:
+            r = ws.answer(query, sir=s)
+        except Exception as e:
+            log.warning("web search failed: %r", e)
+            r = {"ok": False, "how": "offline", "spoken": ""}
+        log.info("web search: %r -> %s (%d sources)", query, r.get("how"), len(r.get("sources") or []))
+        if r.get("how") == "offline":
+            import urllib.parse
+            self.hands.open_uri("https://search.brave.com/search?q=" + urllib.parse.quote_plus(query))
+            return self.say(f"I couldn't reach the search from here, {s}, so I've opened it in your browser.")
+        if r.get("ok"):
+            try:
+                self.run(["notify-send", "-a", "JARVIS", "-i", "jarvis", "JARVIS search: " + query[:80], r["text"][:1500]])
+            except Exception as e:
+                log.info("search notification: %r", e)
+        return self.say(r.get("spoken") or f"Nothing useful came back, {s}.")
+
     def _confirm(self, question):
         ans = self.ask(question) if self.ask else ""
         return bool(ans) and commands.is_yes(ans)
@@ -418,6 +449,32 @@ class LinuxBrain:
         if action in ("pair_headset", "unpair_headset", "headset_status", "vr_link"):
             return self.say(vrpair.handle(self, {"pair_headset": "pair", "unpair_headset": "unpair",
                                                  "headset_status": "status", "vr_link": "link"}[action]))
+        if action == "vr_cgnat":
+            mode = x.get("mode")
+            setter = getattr(self, "cgnat_setter", None) or vrpair.set_cgnat
+            if mode == "status":
+                return self.say(vrpair.cgnat_status_words(setter(self.vr, None), sir=s))
+            if mode == "on":
+                cur = setter(self.vr, None)
+                if cur.get("cgnat") and "mixed" not in str(cur.get("firewall")):
+                    return self.say(f"It's already on, {s}. Say pair my headset when you're ready.")
+                if not self._confirm(vrpair.cgnat_question(s)):
+                    return self.say(f"Very well, {s}. It stays off; say turn on CGNAT if you change your mind.")
+            r = setter(self.vr, mode == "on")
+            log.info("VR CGNAT option by voice: %s -> %s", mode, r)
+            return self.say(vrpair.cgnat_words(r, sir=s))
+        if action == "web_search":
+            return self.web_search(x.get("query") or "")
+        if action == "search_source":
+            last = websearch.load_last(getattr(self, "search_state", None))
+            srcs = last.get("sources") or []
+            n = int(x.get("n") or 1)
+            if not srcs:
+                return self.say(f"I haven't searched anything yet, {s}. Say search the web for, then your question.")
+            if n > len(srcs):
+                return self.say(f"That search only had {len(srcs)} sources, {s}.")
+            self.launch(["xdg-open", srcs[n - 1]["url"]])
+            return self.say(f"Opening source {n}, from {websearch.site_name(srcs[n - 1]['url'])}, {s}.")
         if action == "web_app":
             key = (x or {}).get("app")
             argv = webapps.open_argv(key)

@@ -70,8 +70,8 @@ case "$FWI" in *192.168.0.0/16*) ;; *) echo "firewall: jarvis-lan ipset lost its
 test -x /usr/libexec/jarvis-os/vr-cgnat
 test -s /usr/share/polkit-1/actions/os.jarvis.vr-cgnat.policy
 
-# 3c. rc6: launchers for JARVIS's web apps (JARVIS VR, aim trainer, Reality Orbs): app menu entries with original icons
-for f in jarvis-vr-web jarvis-aim-web jarvis-orbs-web; do
+# 3c. rc6: launchers for JARVIS's web apps (JARVIS VR, aim trainer, Reality Orbs; rc7: Fly Vault): app menu entries with original icons
+for f in jarvis-vr-web jarvis-aim-web jarvis-orbs-web jarvis-fly-web; do
   test -s "/usr/share/applications/$f.desktop"; test -s "/usr/share/icons/hicolor/scalable/apps/$f.svg"
 done
 if command -v desktop-file-validate >/dev/null; then desktop-file-validate /usr/share/applications/jarvis-*-web.desktop || true; fi
