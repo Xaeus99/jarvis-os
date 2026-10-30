@@ -175,6 +175,7 @@ class Asker:
         with self._lock:
             self._ev, self._ans, self._q, self._by = ev, "", question or "", None
         d = self.box.get("daemon")
+        log.info("confirm: asking %r", question)
         try:
             self.say(question)
             if d is not None and threading.current_thread() is d.thread:
