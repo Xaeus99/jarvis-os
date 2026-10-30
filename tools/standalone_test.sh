@@ -77,10 +77,23 @@ ser 'jarvisctl vr status; grep -o "\"allow_cgnat\": *[a-z]*" ~/.config/jarvis/co
 ser 'jarvisctl vr cgnat off; echo CGNATOFF=$?' 12
 ser 'echo CGNAT_AFTER=$(timeout 10 firewall-cmd --ipset=jarvis-lan --get-entries </dev/null | tr "\n" " ")' 4
 ser 'jarvisctl vr cgnat status | sed "s/^/CGNAT_STATUS_OFF: /"' 10
+# rc7: JARVIS's yes/no questions get answered (before rc7 the desktop daemon could not ask, so every "are you sure?"
+# counted as no). Here the CGNAT option is asked for in words, JARVIS asks first (spoken on the sound card), and the
+# answer is typed exactly as the workspace would send it: "yes" turns it on, "no" leaves it off.
+mark "CONFIRMATIONS AND CGNAT BY VOICE"; ser 'jarvisctl tell "is cgnat on"' 10
+ser 'jarvisctl tell "my router uses cgnat"' 2
+ser 'for i in $(seq 1 40); do [ "$(journalctl --user -b --no-pager -o cat -u jarvisd | grep -c "confirm: asking")" -ge 1 ] && break; sleep 1; done; sleep 1; jarvisctl tell "yes"; echo ANSWERED_YES' 45
+ser 'sleep 8; echo CONFIRM_YES_ENTRIES=$(timeout 10 firewall-cmd --ipset=jarvis-lan --get-entries </dev/null | tr "\n" " ")' 16
+ser 'jarvisctl tell "turn off cgnat"' 12
+ser 'echo CONFIRM_OFF_ENTRIES=$(timeout 10 firewall-cmd --ipset=jarvis-lan --get-entries </dev/null | tr "\n" " ")' 4
+ser 'jarvisctl tell "turn on cgnat mode"' 2
+ser 'for i in $(seq 1 40); do [ "$(journalctl --user -b --no-pager -o cat -u jarvisd | grep -c "confirm: asking")" -ge 2 ] && break; sleep 1; done; sleep 1; jarvisctl tell "no"; echo ANSWERED_NO' 45
+ser 'sleep 6; echo CONFIRM_NO_ENTRIES=$(timeout 10 firewall-cmd --ipset=jarvis-lan --get-entries </dev/null | tr "\n" " ")' 14
+ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -E "confirm:|VR CGNAT option by voice" | sed "s/^/CONFIRMLOG: /"' 4
 # rc6: the workspace's PAIR VR button and JARVIS APPS menu load with the panel (any failure is logged by name)
 mark "WORKSPACE BUTTONS"; ser 'jarvisctl workspace open' 6
 ser 'echo WSBTNERR=$(journalctl --user -b --no-pager -o cat | grep -cE "PAIR VR button unavailable|JARVIS APPS button unavailable")' 4
-ser 'echo WEBAPPS=$(ls /usr/share/applications/jarvis-vr-web.desktop /usr/share/applications/jarvis-aim-web.desktop /usr/share/applications/jarvis-orbs-web.desktop 2>/dev/null | wc -l) ICONS=$(ls /usr/share/icons/hicolor/scalable/apps/jarvis-*-web.svg 2>/dev/null | wc -l)' 3
+ser 'echo WEBAPPS=$(ls /usr/share/applications/jarvis-vr-web.desktop /usr/share/applications/jarvis-aim-web.desktop /usr/share/applications/jarvis-orbs-web.desktop /usr/share/applications/jarvis-fly-web.desktop 2>/dev/null | wc -l) ICONS=$(ls /usr/share/icons/hicolor/scalable/apps/jarvis-*-web.svg 2>/dev/null | wc -l)' 3
 ser 'grep -h "^Exec=" /usr/share/applications/jarvis-*-web.desktop' 2
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin
@@ -160,10 +173,19 @@ mark "3D BRAIN"; ser 'jarvisctl tell "show your brain"' 10; ser 'jarvisctl tell 
 sleep 40; wake; shot 18_brain
 ser 'ls -l ~/.local/state/jarvis/brain_events.jsonl; tail -n 6 ~/.local/state/jarvis/brain_events.jsonl' 4
 ser 'jarvisctl tell "close your brain"; jarvisctl tell "hide the countdown"' 6
+# rc7: "search the web for ..." answered out loud: DuckDuckGo + the offline brain (or the top result's summary),
+# with the sites named and a notification listing the sources. The VM has internet through QEMU's user network.
+mark "WEB SEARCH"; ser 'jarvisctl tell "search the web for how tall is mount everest"' 5
+ser 'for i in $(seq 1 170); do journalctl --user -b --no-pager -o cat -u jarvisd | grep -q "web search: " && break; sleep 1; done; journalctl --user -b --no-pager -o cat -u jarvisd | grep "web search: " | sed "s/^/WEBSEARCHLOG: /"' 175
+ser 'sleep 20; head -c 1500 ~/.local/state/jarvis/last_search.json; echo' 24
+wake; shot 19_web_search
 # rc6: JARVIS's web apps by voice (xdg-open hands the address to the browser; asked last so a browser window can't
 # cover the earlier screenshots)
 mark "WEB APPS BY VOICE"; ser 'jarvisctl tell "open the aim trainer"' 10; ser 'jarvisctl tell "open reality orbs"' 10
 ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -ciE "jarvis-(aim|orbs)\.sites" | sed "s/^/WEBAPPLOG=/"' 3
+# rc7: Fly Vault, the fourth web app
+ser 'jarvisctl tell "open fly vault"' 10
+ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -ciE "jarvis-fly\.sites" | sed "s/^/FLYLOG=/"' 3
 mark "WORKSHOP LOG"; ser 'journalctl --user -b --no-pager -o cat | grep -iE "holowin|workshop|holo|brain feed|Traceback" | tail -30' 8
 mark "IMAGE ENGINE LOG"; ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -iE "creator|sd-cli|nsfw|gore|safety|image|race|viewer" | tail -40' 8
 mark "JARVIS LOG"; ser 'journalctl --user -b --no-pager -o cat -u jarvisd -u jarvis-ai-setup -u jarvis-ollama | grep -v "^time=" | tail -80' 8

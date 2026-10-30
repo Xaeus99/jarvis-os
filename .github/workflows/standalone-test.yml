@@ -3,6 +3,8 @@
 # Oct 23 2026 (1.0.0-rc4): runs again on the rc4 image D20 (setup card layout fix).
 # Oct 28 2026 (1.0.0-rc5): VR bridge verdict (selftest, 'pair my headset', host -> VM port 8771 through the firewall, unpair closes it).
 #   Re-run on D22 (9be915d: unpair closes the port at once; run 40604156665 on D21 saw it close 23 s late).
+# Oct 30 2026 (1.0.0-rc7): yes/no questions answered (CGNAT by voice: "yes" turns it on, "no" leaves it off), web search
+#   spoken with sources, Fly Vault launcher.
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
@@ -108,13 +110,36 @@ jobs:
           grep -q '^CGNAT_STATUS_OFF: .*option.*: off; firewall: off' "$S" || { echo "::error::after 'cgnat off' the option, the running firewall and the saved config do not all say off"; exit 1; }
           echo "VR CGNAT option: OK"
           grep -q '^WSBTNERR=0' "$S" || { echo "::error::the workspace's PAIR VR / JARVIS APPS button failed to load"; exit 1; }
-          grep -q '^WEBAPPS=3 ICONS=3' "$S" || { echo "::error::the web-app launchers or their icons are missing"; exit 1; }
+          grep -q '^WEBAPPS=4 ICONS=4' "$S" || { echo "::error::the web-app launchers or their icons are missing"; exit 1; }
           grep -q '^WEBAPPLOG=[1-9]' "$S" || { echo "::error::'open the aim trainer' / 'open reality orbs' did not open a web app"; exit 1; }
           ! sed -n '/==== VR CGNAT OPTION/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc6 checks"; exit 1; }
           grep -qiE 'aim trainer|reality orbs' shots/voice_transcript.txt || { echo "::error::JARVIS did not say he was opening the web app"; exit 1; }
           echo "workspace buttons + web-app launchers: OK"
+      - name: Verdict - yes/no questions answered, CGNAT by voice, web search, Fly Vault (rc7)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          sed -n '/==== CONFIRMATIONS AND CGNAT BY VOICE/,/==== WORKSPACE BUTTONS/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -60
+          sed -n '/==== WEB SEARCH/,/==== WEB APPS BY VOICE/p' "$S" | grep -v '^\[ *[0-9.]*\]' | head -40
+          grep -q '^ANSWERED_YES' "$S" && grep -q '^ANSWERED_NO' "$S" || { echo "::error::JARVIS never asked first (no 'confirm: asking' in the log), so no answer was typed"; exit 1; }
+          grep -qF -- "-> 'yes' (typed)" "$S" || { echo "::error::the typed 'yes' was not taken as the answer to JARVIS's question"; exit 1; }
+          grep -qF -- "-> 'no' (typed)" "$S" || { echo "::error::the typed 'no' was not taken as the answer to JARVIS's question"; exit 1; }
+          grep -q '^CONFIRM_YES_ENTRIES=.*100\.64\.0\.0/10' "$S" && grep -q '^CONFIRM_YES_ENTRIES=.*192\.168\.0\.0/16' "$S" || { echo "::error::'my router uses CGNAT' + 'yes' did not switch the CGNAT option on"; exit 1; }
+          ! grep -q '^CONFIRM_OFF_ENTRIES=.*100\.64' "$S" && grep -q '^CONFIRM_OFF_ENTRIES=.*192\.168\.0\.0/16' "$S" || { echo "::error::'turn off CGNAT' by voice did not restore the RFC 1918-only ipset"; exit 1; }
+          ! grep -q '^CONFIRM_NO_ENTRIES=.*100\.64' "$S" && grep -q '^CONFIRM_NO_ENTRIES=.*192\.168\.0\.0/16' "$S" || { echo "::error::'turn on CGNAT mode' + 'no' changed the firewall anyway"; exit 1; }
+          grep -qi 'turn it on' shots/voice_transcript.txt || { echo "::error::JARVIS's question was not heard on the sound card"; exit 1; }
+          echo "yes/no questions + CGNAT by voice: OK"
+          grep -q '^WEBSEARCHLOG: .*web search: ' "$S" || { echo "::error::'search the web for ...' was not handled by the web search"; exit 1; }
+          grep -qi 'searching the web' shots/voice_transcript.txt || { echo "::error::JARVIS did not say he was searching the web"; exit 1; }
+          echo "web search result: $(grep -m1 '^WEBSEARCHLOG: ' "$S" | sed 's/^WEBSEARCHLOG: .*web search: //')"
+          grep -q '^FLYLOG=[1-9]' "$S" || { echo "::error::'open fly vault' did not open Fly Vault"; exit 1; }
+          grep -qi 'fly vault' shots/voice_transcript.txt || { echo "::error::JARVIS did not say he was opening Fly Vault"; exit 1; }
+          ! sed -n '/==== CONFIRMATIONS AND CGNAT BY VOICE/,/==== WORKSPACE BUTTONS/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc7 confirmation checks"; exit 1; }
+          ! sed -n '/==== WEB SEARCH/,/==== WORKSHOP LOG/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc7 web search / Fly Vault checks"; exit 1; }
+          echo "web search + Fly Vault: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
 # re-run on beta = D11 (sha256:d3afcec051e0..., NVIDIA modesetting), Oct 14
 # rc6 gate, Oct 29: CGNAT option + workspace buttons + web-app launchers verdict
+# rc7 gate, Oct 30: yes/no questions + CGNAT by voice + web search + Fly Vault verdict

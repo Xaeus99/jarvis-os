@@ -1,10 +1,31 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc6** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
-> rc6 Oct 29: rc6 adds a PAIR VR button, an opt-in CGNAT option for the headset and launchers for JARVIS's web apps).
+> Release candidate: **v1.0.0-rc7** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
+> rc6 Oct 29, rc7 Oct 30: rc7 makes JARVIS's yes/no questions answerable on the PC, adds the CGNAT option by voice,
+> spoken web search with sources and Fly Vault).
 > The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc7 (Oct 30)
+
+- **"Are you sure?" now works on the PC.** Some commands ask first: switch to Windows, restart into the BIOS, roll
+  back an update, let Tab drive, fix the graphics driver, restore my games, sleep and shut down. Before rc7 the PC
+  had no way to hear the answer, so all of them quietly counted as "no". Now JARVIS asks out loud and listens right
+  away (no need to say "Jarvis" again), or takes the next thing you type in the workspace. Silence or anything unclear
+  is still "no".
+- **CGNAT by voice.** "Jarvis, my router uses CGNAT" (or "turn on CGNAT") switches the headset's 100.64.x.x option on
+  after JARVIS asks first; "turn off CGNAT" and "is CGNAT on?" do what they say. `jarvisctl vr cgnat` still works.
+- **"Jarvis, search the web for ..."** JARVIS searches DuckDuckGo (strict safe search), reads the top pages, and the
+  offline brain answers in a few sentences from those pages only, naming the sites ("That's from wikipedia.org"). A
+  notification lists the numbered links; "open source two" opens one. Without the offline brain, or while a game is
+  running, he reads the best result's own summary instead. Nothing goes to Tab, no account or key is needed.
+  "Google ...", "look up ..." and "search for ..." still open the search in your browser.
+- **Fly Vault**, JARVIS's newest web app (five caged fruit flies, each run by its own tiny brain sim, under a
+  simulated-time clock), has its own app-menu entry and icon, a place in the JARVIS APPS menu, and a voice command:
+  "Jarvis, open fly vault".
+- **Same base.** Bazzite has not released a newer stable build since rc5 (still 44.20261026, Linux kernel 7.2.11).
+  Every test below ran again on the rc7 image.
 
 ## New in rc6 (Oct 29)
 
@@ -130,7 +151,9 @@ login, safe graphics boot), the Secure Boot + MOK install, and the update test (
 - Your motherboard's own Secure Boot and boot menu (tested on standard virtual firmware with Microsoft's keys).
 - A real USB stick written by real Rufus (we copy exactly what Rufus 4.15 does).
 - BitLocker on your real C: drive, your real disk sizes, NVMe.
-- Microphone and wake word in your room, HYTE RGB, speakers and Bluetooth.
+- Microphone and wake word in your room (including answering JARVIS's yes/no questions out loud; in the VM the answer
+  was typed), HYTE RGB, speakers and Bluetooth.
+- Web search from your home internet (DuckDuckGo can rate-limit) and the answer's speed on your graphics card.
 - Your Quest 3 pairing with JARVIS OS over your own home network (tested with a pretend headset over the real
   encrypted connection in the VM), and whether your router hands out 100.64.x.x addresses (the CGNAT option).
 
