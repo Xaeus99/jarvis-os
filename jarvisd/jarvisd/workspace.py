@@ -329,6 +329,28 @@ def add_vr_button(w, QtCore, send=None, period_ms=4000):
     return btn
 
 
+WEBAPP_TILE_NAMES = {"vr": "JARVIS VR", "aim": "Aim", "orbs": "Orbs", "fly": "Fly Vault"}
+
+def webapp_tiles():
+    """rc8: JARVIS's web apps as Quick launch tiles (the grid now grows with its tiles). A tile's target is the app's
+    .desktop launcher, so it opens through gtk-launch and shows the launcher's own icon."""
+    from . import webapps
+    return [{"name": WEBAPP_TILE_NAMES.get(k, a["name"]), "target": a["desktop"]} for k, a in webapps.APPS.items()]
+
+def with_webapp_tiles(cfg, default_tiles):
+    """Adds the web-app tiles to the Quick launch list once (config workspace.webapp_tiles marks it done), after his
+    own tiles; a tile he removes later stays removed. Returns (tiles, changed)."""
+    ws = (cfg or {}).get("workspace") or {}
+    tiles = [dict(e) for e in (ws.get("quick_launch") or default_tiles)]
+    if ws.get("webapp_tiles"):
+        return tiles, False
+    have = {(e.get("target") or "").lower() for e in tiles}
+    for t in webapp_tiles():
+        if t["target"].lower() not in have:
+            tiles.append(t)
+    return tiles, True
+
+
 def webapps_menu_items():
     """The quick-launch panel's JARVIS APPS menu (rc6): (label, theme icon, argv) for JARVIS's web apps."""
     from . import webapps
@@ -342,7 +364,8 @@ def add_webapps_button(w, QtWidgets, launch=None):
     from PySide6 import QtGui
     from .core import workspace as W
     panel = w.p_launch
-    btn = W.HudButton("JARVIS APPS", h=22, tip="JARVIS VR, the aim trainer and Reality Orbs (open in your browser)")
+    btn = W.HudButton("JARVIS APPS", h=22, short="APPS",
+                      tip="JARVIS VR, the aim trainer, Reality Orbs and Fly Vault (open in your browser)")
     menu = QtWidgets.QMenu(btn)
     for label, icon, argv in webapps_menu_items():
         act = menu.addAction(QtGui.QIcon.fromTheme(icon), label)
@@ -398,6 +421,15 @@ def _real_window(cfg, QtWidgets, QtCore):
     from . import hud
     hud.load_fonts(QtGui, T)
     T.set_theme(cfg.get("theme", "vibranium"))
+    try:                                  # rc8: the web apps become Quick launch tiles (once)
+        tiles, changed = with_webapp_tiles(cfg, W.DEFAULT_LAUNCH)
+        if changed:
+            cfg = dict(cfg); cfg["workspace"] = dict(cfg.get("workspace") or {}, quick_launch=tiles, webapp_tiles=1)
+            def _mark(c, tiles=tiles):
+                ws = c.setdefault("workspace", {}); ws["quick_launch"] = tiles; ws["webapp_tiles"] = 1
+            save_cfg(_mark)
+    except Exception as e:
+        logging.getLogger("jarvisd.workspace").warning("web-app tiles unavailable: %r", e)
     w = W.Workspace(cfg, data_dir=os.path.join(STATE, "workspace"), hostname=socket.gethostname().split(".")[0],
                     icon_for=make_icon_for(QtGui, QtWidgets, QtCore))
 

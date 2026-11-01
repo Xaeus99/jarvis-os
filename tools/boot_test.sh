@@ -41,6 +41,10 @@ ser 'export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:pat
 ser 'echo KWIN_LIST_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 ser 'jarvisctl workspace toggle; echo WORKSPACE_RC=$?' 12
 shot 22_workspace_panel; sleep 10; shot 23_workspace_panel
+# rc8: the same panel at 1920x1080 (KDE's own display tool switches the virtual screen's mode; 22/23 are 1280x800)
+ser 'export WAYLAND_DISPLAY=wayland-0; kscreen-doctor -o 2>&1 | sed "s/\x1b\[[0-9;]*m//g" | head -8 | sed "s/^/KSCREEN: /"' 8
+ser 'O=$(kscreen-doctor -j 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[\"outputs\"][0][\"name\"])"); echo KSCREEN_OUT=$O; kscreen-doctor output.$O.mode.1920x1080@60 >/dev/null 2>&1 || kscreen-doctor output.$O.mode.1920x1080 >/dev/null 2>&1; echo MODE_RC=$?' 12
+sleep 8; shot 24_workspace_1920
 ser 'echo KWIN_LIST2_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 mon "quit"; wait $QPID 2>/dev/null
 ls -la "$OUT"

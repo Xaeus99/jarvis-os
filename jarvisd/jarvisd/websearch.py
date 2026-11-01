@@ -9,6 +9,10 @@ search). Free, no key, no account:
    own summary instead and names its site.
 4. A notification shows the answer with the numbered links; "open source two" / "open that source" opens one.
 
+1.0.0-rc8: on a PC without an NVIDIA GPU the answer is written on the processor, so JARVIS uses the 1B model, the top
+three pages trimmed to the sentences that match the question (600 characters each), a tighter prompt and a 75 s limit
+(the rc7 VM test timed out after 150 s with the 3B model and ~3k tokens). With an NVIDIA GPU nothing changed.
+
 Only the search words go to DuckDuckGo and the result pages; nothing goes to Tab, nothing paid is used, and no model
 weights ship in the image. "google ...", "look up ..." and "search for ..." still open the search in the browser;
 if the search can't be reached, "search the web for ..." does that too.
@@ -22,6 +26,16 @@ UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Fi
       "Accept-Language": "en-GB,en;q=0.8"}
 DDG = "https://html.duckduckgo.com/html/"
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "jarvis", "last_search.json")
+# rc8: a PC without an NVIDIA GPU answers on the processor, where the 3B model with ~3k tokens of pages took longer than
+# the 150 s limit (the rc7 VM test fell back to the snippet). There JARVIS uses the 1B model, the top 3 pages trimmed to
+# their most relevant sentences, a tighter prompt and a 75 s limit; the snippet fallback stays.
+CPU_MODEL = "llama3.2:1b"
+PROFILES = {
+    "gpu": {"pages": 3, "sources": 6, "chars": 2000, "num_ctx": 4096, "num_predict": 220, "timeout": 150},
+    "cpu": {"pages": 3, "sources": 3, "chars": 600, "num_ctx": 2048, "num_predict": 110, "timeout": 75},
+}
+SYSTEM_CPU = ("You are J.A.R.V.I.S. Answer the question in 1 or 2 short plain sentences using ONLY the numbered sources, "
+              "and cite like [1]. If they don't answer it, say so. No lists, no URLs.")
 SYSTEM = ("You are J.A.R.V.I.S. answering a teenager's web question from search results. Use ONLY the numbered sources. "
           "Write 2 to 4 short plain sentences, cite each fact like [1] or [2][3], and never invent a source number. "
           "If the sources don't answer it, say so in one sentence. No markdown, no lists, no URLs.")
@@ -172,6 +186,46 @@ _STOP = {"the", "a", "an", "of", "is", "are", "was", "what", "who", "how", "much
          "for", "to", "and", "or", "my", "me", "it", "its", "this", "that", "when", "where", "which", "with", "have", "has"}
 
 
+def relevant_text(query, text, limit):
+    """rc8: the sentences of a page that share the most words with the question, in page order, up to `limit` chars
+    (the whole text when it is already short)."""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if len(text) <= limit:
+        return text
+    words = {w for w in re.findall(r"[a-z0-9]+", (query or "").lower()) if w not in _STOP and len(w) > 1}
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
+    if not words or not sents:
+        return text[:limit]
+    score = [len(words & set(re.findall(r"[a-z0-9]+", x.lower()))) for x in sents]
+    if not any(score):
+        return text[:limit]
+    scored = sorted((i for i in range(len(sents)) if score[i]), key=lambda i: (-score[i], i))
+    keep, n = [], 0
+    for i in scored:
+        if n + len(sents[i]) + 1 > limit:
+            if not keep:
+                keep.append(i); n = limit
+            continue
+        keep.append(i); n += len(sents[i]) + 1
+    out = " ".join(sents[i] for i in sorted(keep))
+    return out[:limit]
+
+
+_NVIDIA = {}
+
+def has_nvidia(detect=None):
+    """Cached: does this PC have an NVIDIA GPU (nvidia-smi answers)?"""
+    if "v" not in _NVIDIA:
+        try:
+            if detect is None:
+                from . import localai
+                detect = localai.has_nvidia
+            _NVIDIA["v"] = bool(detect())
+        except Exception:
+            _NVIDIA["v"] = False
+    return _NVIDIA["v"]
+
+
 def best_snippet(query, sources):
     """The result whose summary shares the most words with the question (ties: the higher-ranked one)."""
     q = {w for w in re.findall(r"[a-z0-9]+", (query or "").lower()) if w not in _STOP}
@@ -205,8 +259,38 @@ def load_last(path=None):
 
 class WebSearch:
     """answer(query) -> {"ok", "spoken", "text", "sources", "how"}; how = "brain" | "snippet" | reason."""
-    def __init__(self, ai=None, in_game=lambda: False, opener=urllib.request.urlopen, max_pages=3, state=None):
+    def __init__(self, ai=None, in_game=lambda: False, opener=urllib.request.urlopen, max_pages=3, state=None, nvidia=None):
         self.ai, self.in_game, self.opener, self.max_pages, self.state = ai, in_game, opener, max_pages, state
+        self.nvidia = nvidia
+
+    def profile(self):
+        """("gpu" | "cpu", settings). NVIDIA GPU -> the full prompt on the brain's own model; otherwise the CPU profile.
+        assistant.search_profile in the config ("gpu"/"cpu") overrides the detection."""
+        forced = (((getattr(self.ai, "cfg", None) or {}).get("assistant") or {}).get("search_profile") or "").lower()
+        if forced in PROFILES:
+            kind = forced
+        else:
+            nv = self.nvidia if self.nvidia is not None else has_nvidia()
+            kind = "gpu" if nv else "cpu"
+        return kind, dict(PROFILES[kind])
+
+    def search_model(self, kind):
+        """The model for the search answer: the brain's own on a GPU; on the processor the 1B model (or, when it isn't
+        downloaded, the smallest model that is). assistant.search_model in the config overrides."""
+        a = ((getattr(self.ai, "cfg", None) or {}).get("assistant") or {})
+        if (a.get("search_model") or "").strip():
+            return a["search_model"].strip()
+        if kind == "gpu":
+            return self.ai.model()
+        try:
+            have = list(self.ai.available())
+        except Exception:
+            have = []
+        if CPU_MODEL in have or not have:
+            return CPU_MODEL
+        from . import localai
+        order = [CPU_MODEL, "qwen2.5:3b", localai.BIG]
+        return sorted(have, key=lambda m: order.index(m) if m in order else len(order))[0]
 
     def search(self, query, n=6):
         data = urllib.parse.urlencode({"q": query, "kp": "1", "kl": "uk-en"}).encode()
@@ -220,7 +304,7 @@ class WebSearch:
             try:
                 page, ctype = _get(r["url"], timeout=8, opener=self.opener)
                 if "html" in ctype or page.lstrip().startswith("<"):
-                    out[i] = page_text(page)
+                    out[i] = page_text(page, 8000)      # rc8: more page to pick the relevant sentences from
             except Exception as e:
                 log.info("search: page %s: %r", r["url"], e)
         ts = [threading.Thread(target=one, args=(i, r), daemon=True) for i, r in enumerate(results)]
@@ -236,17 +320,27 @@ class WebSearch:
         except Exception:
             return False
 
-    def ask_brain(self, query, sources, timeout=150):
+    def ask_brain(self, query, sources, timeout=None, kind=None, prof=None):
         from . import localai
+        import time as _t
+        if prof is None:
+            kind, prof = self.profile()
+        timeout = timeout or prof["timeout"]
+        model = self.search_model(kind)
         ctx = "\n\n".join(f"[{i + 1}] {s['title']} ({site_name(s['url'])})\n{s['text']}" for i, s in enumerate(sources))
-        body = {"model": self.ai.model(), "stream": False, "keep_alive": "10m",
-                "options": {"temperature": 0.2, "num_ctx": 4096, "num_predict": 220},
-                "messages": [{"role": "system", "content": SYSTEM},
+        body = {"model": model, "stream": False, "keep_alive": "10m",
+                "options": {"temperature": 0.2, "num_ctx": prof["num_ctx"], "num_predict": prof["num_predict"]},
+                "messages": [{"role": "system", "content": SYSTEM_CPU if kind == "cpu" else SYSTEM},
                              {"role": "user", "content": f"Sources:\n{ctx}\n\nQuestion: {query}"}]}
+        t0 = _t.time()
         with localai._req(self.ai.c["url"] + "/api/chat", body, timeout=timeout, opener=self.ai.opener) as r:
             d = json.loads(r.read().decode("utf-8", "replace") or "{}")
         txt = (d.get("message") or {}).get("content", "")
-        return re.sub(r"<think>.*?</think>", "", txt, flags=re.S).strip()
+        txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.S).strip()
+        self.last_brain = {"model": model, "profile": kind, "seconds": round(_t.time() - t0, 1), "prompt_chars": len(ctx)}
+        log.info("search: brain answered on %s (%s profile) in %.1f s from %d chars of sources", model, kind,
+                 self.last_brain["seconds"], len(ctx))
+        return txt
 
     def answer(self, query, sir="sir"):
         from . import safety
@@ -269,16 +363,21 @@ class WebSearch:
         use_brain = not gaming and self.brain_ready()
         txt, how = "", "snippet"
         if use_brain:
+            kind, prof = self.profile()
+            top = results[: min(self.max_pages, prof["pages"])]
             texts = self.read_pages(top)
-            sources = [dict(r, text=(t or r.get("snippet") or "")[:2000]) for r, t in zip(top, texts)]
-            sources += [dict(r, text=r["snippet"]) for r in results[self.max_pages:] if r.get("snippet")]
-            sources = [s for s in sources if s["text"]][:6]
+            sources = [dict(r, text=relevant_text(query, (r.get("snippet") or "") + " " + (t or ""), prof["chars"])
+                            if kind == "cpu" else (t or r.get("snippet") or "")[:prof["chars"]]) for r, t in zip(top, texts)]
+            sources += [dict(r, text=r["snippet"]) for r in results[len(top):] if r.get("snippet")]
+            sources = [s for s in sources if s["text"].strip()][:prof["sources"]]
             try:
-                txt = self.ask_brain(query, sources)
+                txt = self.ask_brain(query, sources, kind=kind, prof=prof)
                 how = "brain"
             except Exception as e:
-                log.info("search: offline brain failed: %r", e)
+                log.info("search: offline brain failed (%s profile): %r", kind, e)
                 txt = ""
+            seen = {s["url"] for s in sources}      # the notification still lists up to six links (numbers stay valid)
+            sources += [dict(r, text=r.get("snippet") or "") for r in results if r["url"] not in seen][: max(0, 6 - len(sources))]
         else:
             sources = [dict(r, text=r.get("snippet") or "") for r in results]
         if txt:

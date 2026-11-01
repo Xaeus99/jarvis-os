@@ -290,7 +290,7 @@ class _AI:
 def test_answer_with_the_offline_brain(tmp_path):
     log, chat = [], []
     op = _opener(log, chat)
-    r = WS.WebSearch(_AI(op), opener=op, state=str(tmp_path / "s.json")).answer("how much memory does the example card have")
+    r = WS.WebSearch(_AI(op), opener=op, state=str(tmp_path / "s.json"), nvidia=True).answer("how much memory does the example card have")
     assert r["ok"] and r["how"] == "brain"
     assert r["spoken"] == "The Example card has 8 GB of GDDR7 memory. That's from example.org."
     assert "[1] Example GPU Specs\n    https://example.org/gpu?a=1" in r["text"]

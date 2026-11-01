@@ -32,9 +32,40 @@ class Panel(QtWidgets.QWidget):
     def add_header_button(self, btn):
         btn.setParent(self); self.header_widgets.append(btn); self._place_header(); btn.show()
 
-    def _place_header(self):
+    def title_right(self):
+        """x where the painted title (and its marker) ends; header buttons must stay right of it (rc8)."""
+        if not self.title:
+            return 14
+        fm = QtGui.QFontMetricsF(T.font("display", 11, bold=True, spacing=2.4))
+        return int(14 + 10 + fm.horizontalAdvance(self.title.upper()) + 8)
+
+    def _header_fits(self):
         x = self.width() - 12
-        for b in reversed(self.header_widgets):
+        for b in self.header_widgets:
+            x -= b.width() + 6
+        return x + 6 >= self.title_right()
+
+    def _place_header(self):
+        """Right-aligned header buttons. rc8: they never cover the panel's title. If they would, buttons with a short
+        label switch to it (JARVIS APPS -> APPS); if that is still too wide, they keep the short label and the
+        rightmost buttons win (the others are hidden until the panel is wide enough again)."""
+        if self.width() <= 0:
+            return
+        bs = list(self.header_widgets)
+        for b in bs:
+            if hasattr(b, "set_compact"):
+                b.set_compact(False)
+        if not self._header_fits():
+            for b in bs:
+                if hasattr(b, "set_compact"):
+                    b.set_compact(True)
+        x = self.width() - 12; limit = self.title_right()
+        for b in reversed(bs):
+            if x - b.width() < limit:
+                b.setVisible(False); b._crowded = True
+                continue
+            if getattr(b, "_crowded", False):
+                b._crowded = False; b.setVisible(True)
             x -= b.width(); b.move(x, 7); x -= 6
 
     def resizeEvent(self, ev):
@@ -52,15 +83,28 @@ class Panel(QtWidgets.QWidget):
 
 class HudButton(QtWidgets.QAbstractButton):
     """A small angular HUD button with a glyph or text."""
-    def __init__(self, text="", glyph=None, parent=None, w=None, h=26, tip=""):
+    def __init__(self, text="", glyph=None, parent=None, w=None, h=26, tip="", short=None):
         super().__init__(parent)
         self.setText(text); self.glyph = glyph
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setToolTip(tip)
+        self._full, self._short, self._w, self._h, self.compact = text, short, w, h, False
+        self._fit(text)
+        self._hover = False
+
+    def _fit(self, text):
         f = T.font("display", 10, bold=True, spacing=1.5)
         fm = QtGui.QFontMetrics(f)
-        self.setFixedSize(w or max(h, fm.horizontalAdvance(text) + 22 if text else h), h)
-        self._hover = False
+        self.setFixedSize(self._w or max(self._h, fm.horizontalAdvance(text) + 22 if text else self._h), self._h)
+
+    def set_compact(self, on):
+        """rc8: a shorter label (e.g. APPS for JARVIS APPS) when the panel header is crowded."""
+        on = bool(on) and bool(self._short)
+        if on == self.compact:
+            return
+        self.compact = on
+        t = self._short if on else self._full
+        self.setText(t); self._fit(t); self.update()
 
     def enterEvent(self, e): self._hover = True; self.update()
     def leaveEvent(self, e): self._hover = False; self.update()
@@ -416,6 +460,7 @@ class TabScreenPanel(Panel):
     Latest line types itself in over a scanline, an optional thumbnail (click to enlarge), an optional
     progress bar and step name, and the last ~10 steps. "Standing by" after 2 quiet minutes. Collapsible."""
     IDLE_S = 120
+    MIN_H = 100                   # rc8: was 190; gives way to a Quick launch grid that grows
     def __init__(self, parent=None):
         super().__init__("Tab's screen", parent)
         self.items = []               # (ts, text, step, progress)
@@ -427,7 +472,7 @@ class TabScreenPanel(Panel):
         self.b_fold = HudButton(text="–", w=26, h=22, tip="Collapse / expand")
         self.b_fold.clicked.connect(self.toggle)
         self.add_header_button(self.b_fold)
-        self.setMinimumHeight(190)
+        self.setMinimumHeight(self.MIN_H)
         self.timer = QtCore.QTimer(self); self.timer.timeout.connect(self.update); self.timer.start(60)
 
     def toggle(self):
@@ -436,7 +481,7 @@ class TabScreenPanel(Panel):
         if self.collapsed:
             self.setMinimumHeight(self.TOP + 4); self.setMaximumHeight(self.TOP + 4)
         else:
-            self.setMinimumHeight(190); self.setMaximumHeight(16777215)
+            self.setMinimumHeight(self.MIN_H); self.setMaximumHeight(16777215)
         self.update()
 
     def add(self, act):
@@ -592,7 +637,7 @@ class MediaPanel(Panel):
     command = QtCore.Signal(str)
     def __init__(self, parent=None):
         super().__init__("Now playing", parent)
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(116)
         self.d = {}
         self.t0 = _now()
         row = QtWidgets.QHBoxLayout(); row.setSpacing(8); row.addStretch(1)
@@ -652,6 +697,20 @@ DEFAULT_LAUNCH = [   # JARVIS OS public build: generic tiles (he adds his own ga
     {"name": "Files", "target": "files"}, {"name": "Settings", "target": "settings"},
 ]
 
+def tile_label_font(pt):
+    return T.font("display", pt, bold=True, spacing=1.2 if pt > 7.5 else 0.6)
+
+def tile_label_pt(labels, room):
+    """rc8: the largest label size (8.5 pt down to 6 pt) at which every tile name fits `room` pixels."""
+    pt = 8.5
+    while pt > 6.0:
+        fm = QtGui.QFontMetrics(tile_label_font(pt))
+        if all(fm.horizontalAdvance(l) <= room for l in labels):
+            break
+        pt -= 0.5
+    return pt
+
+
 class LaunchTile(QtWidgets.QAbstractButton):
     remove = QtCore.Signal(object)
     rename = QtCore.Signal(object)
@@ -661,8 +720,8 @@ class LaunchTile(QtWidgets.QAbstractButton):
         self.entry, self.icon_, self.add = entry, icon, add
         self.editing = False; self._hover = False
         self.setCursor(QtCore.Qt.PointingHandCursor)
-        self.setMinimumSize(74, 74)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.setMinimumSize(56, 52)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.setToolTip("Add an app or website" if add else "%s\n%s" % (entry.get("name"), entry.get("target")))
         self.setContextMenuPolicy(QtCore.Qt.DefaultContextMenu)
 
@@ -713,10 +772,12 @@ class LaunchTile(QtWidgets.QAbstractButton):
                 p.setFont(T.font("display", ic * 0.38, bold=True)); p.setPen(T.light())
                 mono = "".join(w[0] for w in re.findall(r"[A-Za-z0-9]+", self.entry.get("name") or "?")[:2]).upper() or "?"
                 p.drawText(icr, QtCore.Qt.AlignCenter, mono)
-        p.setFont(T.font("display", 8.5, bold=True, spacing=1.2)); p.setPen(_c(T.light(), 0.95 if hov else 0.75))
-        fm = QtGui.QFontMetrics(p.font())
+        # rc8: one label size for the whole grid (LaunchPanel picks the largest that fits every name, 6-8.5 pt)
+        room = int(r.width() - 6)
+        f = tile_label_font(getattr(self, "label_pt", 8.5)); fm = QtGui.QFontMetrics(f)
+        p.setFont(f); p.setPen(_c(T.light(), 0.95 if hov else 0.75))
         p.drawText(QtCore.QRectF(r.left() + 2, r.bottom() - 20, r.width() - 4, 16), QtCore.Qt.AlignCenter,
-                   fm.elidedText(label, QtCore.Qt.ElideRight, int(r.width() - 6)))
+                   fm.elidedText(label, QtCore.Qt.ElideRight, room))
         if self.editing and not self.add:
             p.setPen(QtGui.QPen(T.accent(), 1.6)); p.setBrush(_c(T.bg0(), 0.9))
             p.drawEllipse(QtCore.QPointF(r.right() - 9, r.top() + 9), 7, 7)
@@ -735,20 +796,51 @@ class LaunchPanel(Panel):
         self.setAcceptDrops(True)
         self.grid_host = QtWidgets.QWidget(); self.grid = QtWidgets.QGridLayout(self.grid_host)
         self.grid.setContentsMargins(0, 0, 0, 0); self.grid.setSpacing(8)
+        self.grid.setAlignment(QtCore.Qt.AlignTop)
         self.lay.addWidget(self.grid_host, 1)
         self.b_edit = HudButton("EDIT", h=22, tip="Add, remove or rename tiles (you can also drop an app or shortcut here)")
         self.b_edit.setCheckable(True); self.b_edit.toggled.connect(self.set_editing)
         self.add_header_button(self.b_edit)
-        self.setMinimumHeight(190)
         self._icons = {}
         self.rebuild()
 
-    def cols(self):
-        return max(3, min(6, int(self.width() / 96))) if self.width() > 0 else 4
+    # rc8 grid fix: the grid grows with its tiles. Tiles are a fixed height worked out from the panel width, the
+    # panel asks the layout for exactly the rows it needs (minimum height), and the panels around it give way.
+    TILE_MIN_W, TILE_MIN_H, TILE_MAX_H, GAP = 62, 54, 84, 8
+
+    def _inner_w(self, width=None):
+        width = self.width() if width is None else width
+        return max(0, width - 28)
+
+    def cols(self, width=None):
+        width = self.width() if width is None else width
+        if width <= 0:
+            return 4
+        n = len(self.entries) + (1 if self.editing else 0)
+        fit = (self._inner_w(width) + self.GAP) // (self.TILE_MIN_W + self.GAP)
+        return int(max(3, min(6, fit, max(3, n))))
+
+    def tile_h(self, width=None):
+        cols = self.cols(width)
+        tw = (self._inner_w(width) - self.GAP * (cols - 1)) / max(1, cols)
+        return int(max(self.TILE_MIN_H, min(self.TILE_MAX_H, tw * 0.84)))
+
+    def rows(self, width=None):
+        n = len(self.entries) + (1 if self.editing else 0)
+        return max(1, -(-n // self.cols(width)))
+
+    def needed_height(self, width=None):
+        r = self.rows(width)
+        return self.TOP + r * self.tile_h(width) + (r - 1) * self.GAP + 12
+
+    def _fit_height(self):
+        need = self.needed_height()
+        if self.minimumHeight() != need:
+            self.setMinimumHeight(need)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        if getattr(self, "_last_cols", None) != self.cols():
+        if getattr(self, "_last_cols", None) != self.cols() or getattr(self, "_last_th", None) != self.tile_h():
             self.rebuild()
 
     def rebuild(self):
@@ -756,7 +848,10 @@ class LaunchPanel(Panel):
             w = self.grid.takeAt(0).widget()
             if w: w.deleteLater()
         cols = self.cols(); self._last_cols = cols
+        th = self.tile_h(); self._last_th = th
         items = list(self.entries) + ([None] if self.editing else [])
+        tw = (self._inner_w() - self.GAP * (cols - 1)) / max(1, cols)
+        pt = tile_label_pt([(e.get("name") or "?").upper() if e else "ADD" for e in items], int(tw - 10))
         for i, e in enumerate(items):
             if e is None:
                 t = LaunchTile({}, add=True); t.clicked.connect(self.add_dialog)
@@ -769,9 +864,11 @@ class LaunchPanel(Panel):
                 t.editing = self.editing
                 t.clicked.connect(lambda _=False, t=t: self._tile_clicked(t))
                 t.remove.connect(self._remove); t.rename.connect(self._rename); t.move_by.connect(self._move)
+            t.setFixedHeight(th); t.label_pt = pt
             self.grid.addWidget(t, i // cols, i % cols)
         for c in range(cols):
             self.grid.setColumnStretch(c, 1)
+        self._fit_height()
 
     def _tile_clicked(self, t):
         if self.editing:
@@ -859,7 +956,7 @@ class ClipTile(QtWidgets.QAbstractButton):
         self.pix = None; self._hover = False
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setToolTip(path)
-        self.setMinimumSize(120, 82)
+        self.setMinimumSize(120, 60)     # rc8: was 82; the clips row gives way on small screens
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     def enterEvent(self, e): self._hover = True; self.update()
@@ -920,7 +1017,7 @@ class ClipsPanel(Panel):
         b2 = HudButton(glyph="folder", w=26, h=22, tip="Open the clips folder"); b2.clicked.connect(self.open_folder.emit)
         self.add_header_button(b2); self.add_header_button(b1)
         self.tiles = {}
-        self.setMinimumHeight(200)
+        self.setMinimumHeight(94)     # rc8: was 200
         self.restyle()
 
     def restyle(self):
@@ -1489,6 +1586,9 @@ class Workspace(QtWidgets.QWidget):
             w = min(1480, int(av.width() * 0.88)); h = min(900, int(av.height() * 0.88))
             w = max(w, min(self.minimumWidth(), av.width())); h = max(h, min(self.minimumHeight(), av.height()))
             self.setGeometry(av.left() + (av.width() - w) // 2, av.top() + (av.height() - h) // 2, w, h)
+            # rc8: on a small screen (1280x800, 1366x768) the first open fills it instead of a window at its minimum
+            if av.width() < 1400 or av.height() < 860:
+                self._want_max = True
 
     def moveEvent(self, e):
         super().moveEvent(e); self._save_timer.start(800)
