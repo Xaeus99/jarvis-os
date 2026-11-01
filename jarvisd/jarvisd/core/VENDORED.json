@@ -10,7 +10,7 @@
   "weather.py": "54427cf4d1a46e0d43fe2f42530abac3bbf4f4987419bf64e470130e7d3a661a",
   "obs.py": "7ee222c89ab7d48e8e1796b3847560151af9b504c96afa4eeacc58a8f8f4166c",
   "hudart.py": "57dde9ba088ead05074d6b44cdabc23fec6d17904896a47c2bdfa53450f8ef10",
-  "workspace.py": "52291e2c8ec373b1dccab596166281b652ad31539c5e3f09fc7151bb9fbf451b",
+  "workspace.py": "84fcbf8e666ef18adb1a934eb08fe2135da04e2e2b38980091493f2d7c9c0f9d",
   "wsdata.py": "c4b5f5c5583c01b3d510e2bcdd7f2804b1c9788217185fa85971ead918642945",
   "whatsnew.py": "7a768ffa02c9698932ebdeaabfb1f2749a6c41cb1c6cfa714b760ec19d6202b1",
   "holo.py": "adc39e682d0340ef3fba401f12edb109b51205a3722f4fbc37c6e13ebcf899d5",
@@ -21,7 +21,7 @@
   "brainview.py": "a0755104f121ef88ecb8ab4cf7bbadd35ceea36f3830f7234580d57f39d01570"
  },
  "patched": {
-  "workspace.py": "Linux patches on v5.1 workspace.py (sha256 5ce01fa9b93cc7c6a654cd3c950cb3d3951eeca8758343ee92160f8667c32f92): generic quick-launch tiles (no game names), Linux add-tile hints and file filter, no Tab-screen zoom viewer on Linux; top-bar status chips stop short of the VOICE OUT selector. JARVIS OS 1.0.0-rc8 grid fix: header buttons never cover a panel's title (short labels, then the rightmost win); the Quick launch grid grows with its tiles (fixed tile height from the panel width, minimum height = the rows it needs, one label size that fits every name); Tab's screen / Now playing / Recent clips give way (lower minimum heights); first open on a screen under 1400x860 fills it.",
+  "workspace.py": "Linux patches on v5.1 workspace.py (sha256 5ce01fa9b93cc7c6a654cd3c950cb3d3951eeca8758343ee92160f8667c32f92): generic quick-launch tiles (no game names), Linux add-tile hints and file filter, no Tab-screen zoom viewer on Linux; top-bar status chips stop short of the VOICE OUT selector. JARVIS OS 1.0.0-rc8 grid fix: header buttons never cover a panel's title (short labels, then the rightmost win); the Quick launch grid grows with its tiles (fixed tile height from the panel width, minimum height = the rows it needs, one label size that fits every name); Tab's screen / Now playing / Recent clips give way (lower minimum heights); first open on a screen under 1400x860 (that still holds the minimum size) fills it.",
   "wsdata.py": "Linux rewrite of the platform parts of v5.1 wsdata.py (sha256 63c33a3d89a6e95ce8fc9f802c0cda80ef0a02528cbbc277f57fdb2d861beaae): GPU from nvidia-smi / amdgpu sysfs (was win32pdh), now-playing from MPRIS via playerctl (was WinRT), Linux clip folders, disk = home; Stats/recent_clips/thumbnails/Poller unchanged",
   "whatsnew.py": "v5.1 whatsnew.py (sha256 c9379b1640516e6317ce424428f3e6806f78b5128830cddc617e8e64e17c40f6) with optional per-card lines/title/subtitle so JARVIS OS can show its own list; optional per-card kicker and footer (JARVIS OS setup card, 1.0.0-rc2)",
   "holo.py": "v5.6 holo.py (sha256 ecdbd9181e62b7796c35e314fa5cc6b9e2491f35297f6a89d327c03b6cae67d2): check_text imports the blocklists from jarvisd.safety (one level up) and refuses (checks_unavailable) if they can't load, instead of allowing",

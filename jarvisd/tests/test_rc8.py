@@ -115,7 +115,8 @@ def test_small_screen_first_open_fills_it(qt, home):
     from PySide6 import QtGui
     av = QtGui.QGuiApplication.primaryScreen().availableGeometry()
     w = WSP._real_window({}, QtWidgets, QtCore)
-    assert w._want_max == (av.width() < 1400 or av.height() < 860)
+    fits = av.width() >= w.minimumWidth() and av.height() >= w.minimumHeight()
+    assert w._want_max == (fits and (av.width() < 1400 or av.height() < 860))
     w.deleteLater()
 
 

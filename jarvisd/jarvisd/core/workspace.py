@@ -1587,7 +1587,9 @@ class Workspace(QtWidgets.QWidget):
             w = max(w, min(self.minimumWidth(), av.width())); h = max(h, min(self.minimumHeight(), av.height()))
             self.setGeometry(av.left() + (av.width() - w) // 2, av.top() + (av.height() - h) // 2, w, h)
             # rc8: on a small screen (1280x800, 1366x768) the first open fills it instead of a window at its minimum
-            if av.width() < 1400 or av.height() < 860:
+            # (only when the screen can hold the window's minimum size; on a smaller one maximizing would squeeze it)
+            fits = av.width() >= self.minimumWidth() and av.height() >= self.minimumHeight()
+            if fits and (av.width() < 1400 or av.height() < 860):
                 self._want_max = True
 
     def moveEvent(self, e):
