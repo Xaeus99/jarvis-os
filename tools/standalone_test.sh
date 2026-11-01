@@ -95,6 +95,9 @@ mark "WORKSPACE BUTTONS"; ser 'jarvisctl workspace open' 6
 ser 'echo WSBTNERR=$(journalctl --user -b --no-pager -o cat | grep -cE "PAIR VR button unavailable|JARVIS APPS button unavailable")' 4
 ser 'echo WEBAPPS=$(ls /usr/share/applications/jarvis-vr-web.desktop /usr/share/applications/jarvis-aim-web.desktop /usr/share/applications/jarvis-orbs-web.desktop /usr/share/applications/jarvis-fly-web.desktop 2>/dev/null | wc -l) ICONS=$(ls /usr/share/icons/hicolor/scalable/apps/jarvis-*-web.svg 2>/dev/null | wc -l)' 3
 ser 'grep -h "^Exec=" /usr/share/applications/jarvis-*-web.desktop' 2
+# rc8: the web apps are Quick launch tiles now (added once on the first open, saved in the config); the grid grows
+ser 'echo WSTILES=$(python3 -c "import json,os;w=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\"))).get(\"workspace\",{});print(len(w.get(\"quick_launch\") or []),w.get(\"webapp_tiles\",0),sum(1 for t in w.get(\"quick_launch\") or [] if str(t.get(\"target\",\"\")).endswith(\"-web.desktop\")))" 2>&1) WSTILEERR=$(journalctl --user -b --no-pager -o cat | grep -c "web-app tiles unavailable")' 4
+shot 02b_workspace_rc8
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin
 # the offline brain: first login started jarvis-ai-setup.service; wait for it (VM: no GPU -> the small model)
@@ -175,8 +178,12 @@ ser 'ls -l ~/.local/state/jarvis/brain_events.jsonl; tail -n 6 ~/.local/state/ja
 ser 'jarvisctl tell "close your brain"; jarvisctl tell "hide the countdown"' 6
 # rc7: "search the web for ..." answered out loud: DuckDuckGo + the offline brain (or the top result's summary),
 # with the sites named and a notification listing the sources. The VM has internet through QEMU's user network.
-mark "WEB SEARCH"; ser 'jarvisctl tell "search the web for how tall is mount everest"' 5
+# rc8: no NVIDIA GPU in the VM -> the CPU profile (llama3.2:1b, trimmed sources, 75 s); give the brain race above a
+# moment to finish first so the search isn't queued behind it
+mark "WEB SEARCH"; sleep 30; ser 'echo OLLAMA_PS; curl -s --max-time 5 http://127.0.0.1:11434/api/ps | head -c 700; echo' 6
+ser 'jarvisctl tell "search the web for how tall is mount everest"' 5
 ser 'for i in $(seq 1 170); do journalctl --user -b --no-pager -o cat -u jarvisd | grep -q "web search: " && break; sleep 1; done; journalctl --user -b --no-pager -o cat -u jarvisd | grep "web search: " | sed "s/^/WEBSEARCHLOG: /"' 175
+ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -E "search: (brain answered|offline brain failed)" | sed "s/^/WEBSEARCHBRAIN: /"' 4
 ser 'sleep 20; head -c 1500 ~/.local/state/jarvis/last_search.json; echo' 24
 wake; shot 19_web_search
 # rc6: JARVIS's web apps by voice (xdg-open hands the address to the browser; asked last so a browser window can't

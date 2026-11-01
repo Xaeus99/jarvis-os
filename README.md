@@ -28,11 +28,11 @@ Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot
 
 ## Test
 
-    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 453 tests
+    cd jarvisd && QT_QPA_PLATFORM=offscreen python -m pytest -q tests      # 473 tests
 
 ## Status (1.0 release candidate, Oct 2026)
 
-Release candidate **v1.0.0-rc7** (Oct 30: JARVIS's yes/no questions can be answered on the PC, the CGNAT option by voice, "search the web for ..." answered out loud with its sources, Fly Vault as a fourth web app; rc1 Oct 16, rc2 + rc3 Oct 22, rc4 Oct 23, rc5 Oct 28, rc6 Oct 29). Every image goes through the same chain in virtual machines before it is released:
+Release candidate **v1.0.0-rc8** (Nov 1: the workspace fits a 1280x800 screen and JARVIS's web apps are Quick launch tiles, web search answers faster on a PC without an NVIDIA graphics card; rc1 Oct 16, rc2 + rc3 Oct 22, rc4 Oct 23, rc5 Oct 28, rc6 Oct 29, rc7 Oct 30). Every image goes through the same chain in virtual machines before it is released:
 unit tests, a signed build, a boot test to the desktop, the NVIDIA boot settings check, the voice test, the
 installer ISO booting from DVD and from a USB stick (UEFI + BIOS, and a Rufus ISO-mode stick), an unattended
 dual-boot install and a click-through install next to a dummy Windows (Windows stays byte-identical), and the

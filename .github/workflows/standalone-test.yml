@@ -5,6 +5,8 @@
 #   Re-run on D22 (9be915d: unpair closes the port at once; run 40604156665 on D21 saw it close 23 s late).
 # Oct 30 2026 (1.0.0-rc7): yes/no questions answered (CGNAT by voice: "yes" turns it on, "no" leaves it off), web search
 #   spoken with sources, Fly Vault launcher.
+# Nov 1 2026 (1.0.0-rc8): JARVIS's web apps as Quick launch tiles (the grid grows), web search on the processor
+#   (no NVIDIA GPU: the 1B model with trimmed sources).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
 # Standalone JARVIS test: boots the published image in a KVM virtual PC with a virtual sound card (HDA, as in a
 # VirtualBox VM), no Tab link and no GPU, lets the first-login offline-brain download run, then talks to JARVIS:
@@ -137,9 +139,31 @@ jobs:
           ! sed -n '/==== CONFIRMATIONS AND CGNAT BY VOICE/,/==== WORKSPACE BUTTONS/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc7 confirmation checks"; exit 1; }
           ! sed -n '/==== WEB SEARCH/,/==== WORKSHOP LOG/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc7 web search / Fly Vault checks"; exit 1; }
           echo "web search + Fly Vault: OK"
+      - name: Verdict - workspace grid with web-app tiles, web search on the processor (rc8)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          grep -E '^(WSTILES|WEBSEARCHBRAIN|OLLAMA_PS)' "$S" | head -12
+          set -- $(grep -m1 '^WSTILES=' "$S" | sed 's/^WSTILES=//; s/WSTILEERR=/ /')
+          echo "quick launch tiles: $1, web-app tiles added: $2, web-app tiles: $3, tile errors: $4"
+          [ "${3:-0}" -ge 4 ] && [ "${2:-0}" = 1 ] || { echo "::error::the four web apps did not join Quick launch as tiles"; exit 1; }
+          [ "${4:-1}" = 0 ] || { echo "::error::the workspace logged 'web-app tiles unavailable'"; exit 1; }
+          if grep -q '^WEBSEARCHBRAIN: ' "$S"; then
+            grep -q '^WEBSEARCHBRAIN: .*(cpu profile)' "$S" || { echo "::error::the web search did not use the processor profile on a PC without an NVIDIA GPU"; exit 1; }
+            grep -q '^WEBSEARCHBRAIN: .*llama3.2:1b' "$S" || grep -q '^WEBSEARCHBRAIN: .*failed' "$S" || { echo "::error::the processor profile did not pick the 1B model"; exit 1; }
+          else
+            echo "::warning::the offline brain was not ready for the web search, so the processor profile was not exercised"
+          fi
+          if grep -q '^WEBSEARCHBRAIN: .*brain answered on llama3.2:1b (cpu profile)' "$S"; then
+            echo "web search: the offline brain answered on the processor: $(grep -m1 '^WEBSEARCHBRAIN: .*brain answered' "$S" | sed 's/.*brain answered //')"
+          else
+            echo "::warning::the offline brain did not answer the web search in time on the VM's processor (snippet fallback used)"
+          fi
+          echo "workspace grid + web search profile: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
 # re-run on beta = D11 (sha256:d3afcec051e0..., NVIDIA modesetting), Oct 14
 # rc6 gate, Oct 29: CGNAT option + workspace buttons + web-app launchers verdict
 # rc7 gate, Oct 30: yes/no questions + CGNAT by voice + web search + Fly Vault verdict
+# rc8 gate, Nov 1: workspace grid with web-app tiles + web search processor profile verdict

@@ -1,11 +1,25 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc7** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
-> rc6 Oct 29, rc7 Oct 30: rc7 makes JARVIS's yes/no questions answerable on the PC, adds the CGNAT option by voice,
-> spoken web search with sources and Fly Vault).
+> Release candidate: **v1.0.0-rc8** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
+> rc6 Oct 29, rc7 Oct 30, rc8 Nov 1: rc8 fits the workspace on a 1280x800 screen, makes the web apps Quick launch
+> tiles and speeds up web search on a PC without an NVIDIA graphics card).
 > The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc8 (Nov 1)
+
+- **The workspace fits small screens.** On a 1280x800 screen the JARVIS APPS button no longer sits on top of the
+  QUICK LAUNCH title (a crowded header shortens it to APPS), and the panels on the right no longer overlap. On a
+  screen smaller than 1400x860 the workspace opens full screen the first time.
+- **Quick launch grows with its tiles.** The grid now asks for exactly the rows it needs and the panels around it
+  make room, so JARVIS's four web apps (JARVIS VR, Aim, Orbs, Fly Vault) are tiles too, with their own icons. They
+  are added once; remove one with EDIT and it stays removed. The JARVIS APPS menu is still there.
+- **Faster web search without an NVIDIA graphics card.** On a PC that answers on its processor, "search the web for
+  ..." now uses the small offline model with only the sentences from each page that match your question, a shorter
+  prompt and a 75-second limit (rc7's virtual-PC test ran out of time with the bigger model). If it still runs out of
+  time, JARVIS reads the best result's summary as before. With an NVIDIA card nothing changed.
+- **Same base.** Still Bazzite 44.20261026 (Linux kernel 7.2.11). Every test below ran again on the rc8 image.
 
 ## New in rc7 (Oct 30)
 
