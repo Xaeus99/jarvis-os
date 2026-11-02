@@ -5,6 +5,8 @@
 #   Re-run on D22 (9be915d: unpair closes the port at once; run 40604156665 on D21 saw it close 23 s late).
 # Oct 30 2026 (1.0.0-rc7): yes/no questions answered (CGNAT by voice: "yes" turns it on, "no" leaves it off), web search
 #   spoken with sources, Fly Vault launcher.
+# Nov 2 2026 (1.0.0-rc9): colour protocols by voice (blue theme -> purple protocol -> normal protocol) and web-search answers
+#   without a leading list number.
 # Nov 1 2026 (1.0.0-rc8): JARVIS's web apps as Quick launch tiles (the grid grows), web search on the processor
 #   (no NVIDIA GPU: the 1B model with trimmed sources).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
@@ -160,6 +162,24 @@ jobs:
             echo "::warning::the offline brain did not answer the web search in time on the VM's processor (snippet fallback used)"
           fi
           echo "workspace grid + web search profile: OK"
+      - name: Verdict - colour protocols, tidy web-search answer (rc9)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          grep -E '^(PROTO1|PROTO2|PROTOLOG|LASTSEARCH)' "$S" | head -20
+          grep -q '^PROTO1=vibranium purple cyan' "$S" || { echo "::error::'blue theme' then 'purple protocol' did not save the purple look with blue as the normal one"; exit 1; }
+          grep -q '^PROTO2=cyan False' "$S" || { echo "::error::'normal protocol' did not put the blue look back"; exit 1; }
+          grep -q '^PROTOLOG: .*protocol: PURPLE PROTOCOL -> theme vibranium (workspace open' "$S" || { echo "::error::the purple protocol did not reach the open workspace"; exit 1; }
+          grep -q '^PROTOLOG: .*protocol: PURPLE PROTOCOL -> vibranium (effect in the workspace window)' "$S" || echo "::warning::the workspace recoloured without playing the effect (window hidden?)"
+          ! sed -n '/==== PROTOCOLS/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc9 protocol checks"; exit 1; }
+          echo "protocols: OK"
+          if grep -q '^LASTSEARCH=brain' "$S"; then
+            ! grep -qE '^LASTSEARCH=brain \| *[0-9]{1,2}[.)]( |$)' "$S" || { echo "::error::the web-search answer still starts with a list number"; exit 1; }
+            echo "web search answer: $(grep -m1 '^LASTSEARCH=' "$S" | sed 's/^LASTSEARCH=//')"
+          else
+            echo "::warning::the offline brain did not answer the web search, so the tidy answer was not exercised ($(grep -m1 '^LASTSEARCH=' "$S"))"
+          fi
+          echo "rc9 checks: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
@@ -167,3 +187,4 @@ jobs:
 # rc6 gate, Oct 29: CGNAT option + workspace buttons + web-app launchers verdict
 # rc7 gate, Oct 30: yes/no questions + CGNAT by voice + web search + Fly Vault verdict
 # rc8 gate, Nov 1: workspace grid with web-app tiles + web search processor profile verdict
+# rc9 gate, Nov 2: colour protocols + tidy web-search answer verdict

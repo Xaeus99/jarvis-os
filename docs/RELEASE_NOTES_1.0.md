@@ -1,11 +1,25 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc8** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
-> rc6 Oct 29, rc7 Oct 30, rc8 Nov 1: rc8 fits the workspace on a 1280x800 screen, makes the web apps Quick launch
-> tiles and speeds up web search on a PC without an NVIDIA graphics card).
+> Release candidate: **v1.0.0-rc9** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
+> rc6 Oct 29, rc7 Oct 30, rc8 Nov 1, rc9 Nov 2: rc9 adds colour protocols ("purple protocol"), full Quick launch
+> names and cleaner spoken web-search answers).
 > The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc9 (Nov 2)
+
+- **Colour protocols.** Say "Jarvis, purple protocol": the workspace window flashes a crackle of lightning, goes
+  dark, shows PURPLE PROTOCOL, bursts an orb of light and comes back purple, and the JARVIS ring turns purple too.
+  Red, blue, orange, crimson and stealth protocols work the same way. "Normal protocol" puts back the look you had
+  before. The effect only plays inside the workspace window (it never covers your desktop or a game) and is skipped
+  while a game is running. "Red theme", "switch the theme to orange" and "next theme" change the colour quietly.
+- **Quick launch names fit.** Long names now wrap onto two lines instead of being cut off ("FLY VA..." is now
+  FLY VAULT), each tile checks its name against its own size, and the tiles use the panel's full width.
+- **Cleaner web-search answers.** JARVIS no longer reads out a list number ("One, Mount Everest is ...") and always
+  says which site the answer came from, even when the small offline model forgets to cite one.
+- **Small fix.** "Light mode" is the light colour scheme again (it was taken as a lighting profile).
+- **Same base.** Still Bazzite 44.20261026 (Linux kernel 7.2.11). Every test below ran again on the rc9 image.
 
 ## New in rc8 (Nov 1)
 

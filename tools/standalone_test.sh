@@ -98,6 +98,16 @@ ser 'grep -h "^Exec=" /usr/share/applications/jarvis-*-web.desktop' 2
 # rc8: the web apps are Quick launch tiles now (added once on the first open, saved in the config); the grid grows
 ser 'echo WSTILES=$(python3 -c "import json,os;w=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\"))).get(\"workspace\",{});print(len(w.get(\"quick_launch\") or []),w.get(\"webapp_tiles\",0),sum(1 for t in w.get(\"quick_launch\") or [] if str(t.get(\"target\",\"\")).endswith(\"-web.desktop\")))" 2>&1) WSTILEERR=$(journalctl --user -b --no-pager -o cat | grep -c "web-app tiles unavailable")' 4
 shot 02b_workspace_rc8
+# rc9: colour protocols. "blue theme" recolours quietly; "purple protocol" plays the short effect inside the workspace
+# window (crackle, blackout, title, orb burst) and re-themes JARVIS; "normal protocol" puts back the look from before.
+mark "PROTOCOLS"; ser 'jarvisctl tell "blue theme"' 5
+ser 'jarvisctl tell "purple protocol"' 1; shot 02c_protocol_effect
+ser 'sleep 4; echo PROTO1=$(python3 -c "import json,os;c=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\")));p=c.get(\"protocol\") or {};print(c.get(\"theme\"),p.get(\"name\"),p.get(\"base\"))" 2>&1)' 6
+shot 02d_protocol_purple
+ser 'jarvisctl tell "normal protocol"' 6
+ser 'echo PROTO2=$(python3 -c "import json,os;c=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\")));print(c.get(\"theme\"),bool(c.get(\"protocol\")))" 2>&1)' 3
+ser 'journalctl --user -b --no-pager -o cat | grep -E "protocol: |HUD theme" | sed "s/^/PROTOLOG: /"' 4
+ser 'jarvisctl tell "purple theme"' 5
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin
 # the offline brain: first login started jarvis-ai-setup.service; wait for it (VM: no GPU -> the small model)
@@ -185,6 +195,8 @@ ser 'jarvisctl tell "search the web for how tall is mount everest"' 5
 ser 'for i in $(seq 1 170); do journalctl --user -b --no-pager -o cat -u jarvisd | grep -q "web search: " && break; sleep 1; done; journalctl --user -b --no-pager -o cat -u jarvisd | grep "web search: " | sed "s/^/WEBSEARCHLOG: /"' 175
 ser 'journalctl --user -b --no-pager -o cat -u jarvisd | grep -E "search: (brain answered|offline brain failed)" | sed "s/^/WEBSEARCHBRAIN: /"' 4
 ser 'sleep 20; head -c 1500 ~/.local/state/jarvis/last_search.json; echo' 24
+# rc9: the spoken answer has no leading list number ("1. Mount Everest ..." was spoken "One, ...")
+ser 'echo LASTSEARCH=$(python3 -c "import json,os;d=json.load(open(os.path.expanduser(\"~/.local/state/jarvis/last_search.json\")));print(d.get(\"how\"),\"|\",(d.get(\"text\") or \"\")[:160].replace(chr(10),\" \"))" 2>&1)' 3
 wake; shot 19_web_search
 # rc6: JARVIS's web apps by voice (xdg-open hands the address to the browser; asked last so a browser window can't
 # cover the earlier screenshots)
