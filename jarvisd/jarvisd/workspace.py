@@ -65,11 +65,127 @@ class Controller:
             self.call(lambda: w.close() if w.isVisible() else None)
         elif cmd == "log" and hasattr(w, "add_log"):
             self.call(lambda: w.add_log(msg.get("who", "jarvis"), msg.get("text", "")))
+        elif cmd == "protocol":            # rc9: "purple protocol" (protocols.py): short effect, then the new colour
+            how = self.call(lambda: play_protocol(w, msg.get("title") or "", msg.get("theme"), bool(msg.get("effect", True))))
+            return {"ok": True, "visible": self.call(self.visible), "how": how}
         elif cmd == "status":
             pass
         else:
             return {"ok": False, "error": f"unknown command {cmd!r}"}
         return {"ok": True, "visible": self.call(self.visible)}
+
+PROTOCOL_SECONDS = 1.9
+
+def protocol_phases(t):
+    """rc9: the protocol effect at time t (seconds), GUI-free so it can be tested: alpha 0..1 of each layer and whether
+    the new colour is on yet. crackle 0-0.4 s, blackout in 0.25-0.6, title 0.45-1.5, colour switch at 0.7 (under the
+    black), orb burst 0.7-1.15, blackout out 1.4-1.9."""
+    def ramp(a, b):
+        return 0.0 if t <= a else 1.0 if t >= b else (t - a) / (b - a)
+    black = ramp(0.25, 0.6) * (1.0 - ramp(1.4, PROTOCOL_SECONDS)) * 0.92
+    title = ramp(0.45, 0.7) * (1.0 - ramp(1.3, 1.6))
+    crackle = (1.0 - ramp(0.3, 0.45)) if t < 0.45 else 0.0
+    orb = ramp(0.7, 0.8) * (1.0 - ramp(0.9, 1.15)) if 0.7 <= t <= 1.15 else 0.0
+    return {"black": black, "title": title, "crackle": crackle, "orb": orb, "orb_r": ramp(0.7, 1.15),
+            "recolour": t >= 0.7, "done": t >= PROTOCOL_SECONDS}
+
+def paint_protocol(p, rect, t, title, rgb, light, seed=7):
+    """Paint one frame of the protocol effect with QPainter p over rect (QRectF). rgb/light: the new theme's colours."""
+    import random
+    from PySide6 import QtCore, QtGui
+    from .core import theme as T
+    ph = protocol_phases(t)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    col = lambda c, a: QtGui.QColor(c[0], c[1], c[2], max(0, min(255, int(a * 255))))
+    w, h = rect.width(), rect.height()
+    if ph["black"] > 0:
+        p.fillRect(rect, QtGui.QColor(0, 0, 0, int(ph["black"] * 255)))
+    if ph["crackle"] > 0:                  # three jagged bolts across the window, flickering
+        rnd = random.Random(seed + int(t * 30))
+        for k in range(3):
+            y = rect.top() + h * (0.25 + 0.25 * k) + rnd.uniform(-h * 0.08, h * 0.08)
+            pts = [QtCore.QPointF(rect.left(), y)]
+            x = rect.left()
+            while x < rect.right():
+                x += rnd.uniform(w * 0.03, w * 0.08)
+                pts.append(QtCore.QPointF(min(x, rect.right()), y + rnd.uniform(-h * 0.06, h * 0.06)))
+            a = ph["crackle"] * (0.55 + 0.45 * rnd.random())
+            for width, alpha in ((7, 0.25), (2.2, 1.0)):
+                p.setPen(QtGui.QPen(col(rgb if width > 3 else light, a * alpha), width))
+                p.drawPolyline(pts)
+    if ph["orb"] > 0:                      # a burst from the middle in the new colour
+        c = rect.center(); r = min(w, h) * (0.08 + 0.55 * ph["orb_r"])
+        g = QtGui.QRadialGradient(c, r)
+        g.setColorAt(0.0, col(light, ph["orb"])); g.setColorAt(0.35, col(rgb, ph["orb"] * 0.8)); g.setColorAt(1.0, col(rgb, 0))
+        p.setPen(QtCore.Qt.NoPen); p.setBrush(g); p.drawEllipse(c, r, r)
+    if ph["title"] > 0 and title:
+        px = max(18, min(52, int(w / max(8, len(title)) * 1.1)))
+        f = T.font("display", px, bold=True, spacing=px * 0.18)
+        p.setFont(f); fm = QtGui.QFontMetrics(f)
+        y = rect.center().y()
+        p.setPen(col(rgb, ph["title"] * 0.35))
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            p.drawText(QtCore.QRectF(rect.left() + dx, y - px + dy, w, px * 1.6), QtCore.Qt.AlignCenter, title)
+        p.setPen(col(light, ph["title"]))
+        p.drawText(QtCore.QRectF(rect.left(), y - px, w, px * 1.6), QtCore.Qt.AlignCenter, title)
+        tw = min(w * 0.8, fm.horizontalAdvance(title) * 1.05)
+        p.setPen(QtGui.QPen(col(rgb, ph["title"]), 2))
+        p.drawLine(QtCore.QPointF(rect.center().x() - tw / 2, y + px * 0.75), QtCore.QPointF(rect.center().x() + tw / 2, y + px * 0.75))
+    return ph
+
+def play_protocol(w, title, theme, effect=True):
+    """Workspace side of a protocol: recolour now (quiet) or play the effect over the window and recolour under the
+    blackout. Draws only inside the workspace window. Returns 'effect', 'quiet' or 'no theme'."""
+    from .core import theme as T
+    key = T.resolve(theme)
+    if not key:
+        return "no theme"
+    visible = False
+    try:
+        visible = bool(w.isVisible() and not w.isMinimized())
+    except Exception:
+        pass
+    if not (effect and title and visible):
+        T.set_theme(key)
+        return "quiet"
+    from PySide6 import QtCore, QtGui, QtWidgets
+    old = getattr(w, "_protocol_flash", None)
+    if old is not None:
+        try: old.finish()
+        except Exception: pass
+
+    class ProtocolFlash(QtWidgets.QWidget):
+        def __init__(self):
+            super().__init__(w)
+            self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+            self.setAttribute(QtCore.Qt.WA_NoSystemBackground)
+            self.setGeometry(w.rect()); self.raise_(); self.show()
+            th = T.THEMES[key]; self.rgb, self.light = th["main"], th["light"]
+            self.t0 = time.monotonic(); self.recoloured = False
+            self.timer = QtCore.QTimer(self); self.timer.timeout.connect(self.tick); self.timer.start(16)
+        def elapsed(self):
+            return time.monotonic() - self.t0
+        def tick(self):
+            ph = protocol_phases(self.elapsed())
+            if ph["recolour"] and not self.recoloured:
+                self.recoloured = True; T.set_theme(key); self.raise_()
+            if ph["done"]:
+                return self.finish()
+            self.setGeometry(w.rect()); self.update()
+        def finish(self):
+            if not self.recoloured:
+                self.recoloured = True; T.set_theme(key)
+            self.timer.stop(); self.hide(); self.deleteLater()
+            if getattr(w, "_protocol_flash", None) is self:
+                w._protocol_flash = None
+        def paintEvent(self, ev):
+            p = QtGui.QPainter(self)
+            paint_protocol(p, QtCore.QRectF(self.rect()), self.elapsed(), title, self.rgb, self.light)
+            p.end()
+
+    w._protocol_flash = ProtocolFlash()
+    log.info("protocol: %s -> %s (effect in the workspace window)", title, key)
+    return "effect"
 
 def make_gui_caller(QtCore):
     """A callable that runs fn on the Qt GUI thread and waits (max 3 s) for its result."""

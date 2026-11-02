@@ -306,6 +306,7 @@ def main():
         try: brain.studio.warm()
         except Exception as e: log.info("OBS warm-up: %r", e)
     threading.Thread(target=warm_obs, name="obs-warm", daemon=True).start()
+    brain.hud = hud                       # rc9: protocols / "red theme" recolour the HUD ring through hud.json
     try:                                  # games: HUD stays out of the way, auto game mode
         from . import gamewatch
         brain.gamewatch = gamewatch.wire(cfg, brain.run, hud=hud).start()

@@ -174,6 +174,19 @@ def strip_citations(text):
     return re.sub(r"\s+([.,;:!?])", r"\1", t).strip()
 
 
+_LIST_MARK = re.compile(r"^\s*(?:\(?\d{1,2}[.)](?!\d)|[-*\u2022])(?:\s+|$)")
+
+
+def tidy_answer(text):
+    """rc9: small models answer as a list ("1. Mount Everest is ...", spoken "One, Mount Everest ..."). Drop list
+    numbers and bullets at the start of the answer and of each line, and join the lines into plain sentences."""
+    lines = [_LIST_MARK.sub("", ln).strip() for ln in (text or "").splitlines()]
+    t = " ".join(ln for ln in lines if ln)
+    t = re.sub(r"^\s*(?:\*\*)?(?:answer|response)\s*:\s*(?:\*\*)?\s*", "", t, flags=re.I)
+    t = t.replace("**", "")
+    return re.sub(r"\s+", " ", t).strip()
+
+
 def first_sentences(text, n=2, limit=320):
     parts = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", text or "").strip())
     out = " ".join(parts[:n]).strip()
@@ -381,7 +394,12 @@ class WebSearch:
         else:
             sources = [dict(r, text=r.get("snippet") or "") for r in results]
         if txt:
+            txt = tidy_answer(txt)
+        if txt:
             used = sorted({int(n) for n in re.findall(r"\[(\d+)\]", txt) if 0 < int(n) <= len(sources)})
+            if not used and sources:      # rc9: no [n] in the answer (the 1B model often skips them): name the top source
+                used = [1]
+                log.info("search: the answer cited no source; naming the top one (%s)", site_name(sources[0]["url"]))
             names = list(dict.fromkeys(site_name(sources[i - 1]["url"]) for i in used))[:2]
             spoken = strip_citations(txt)
             spoken = re.sub(r"https?://\S+", "", spoken).strip()

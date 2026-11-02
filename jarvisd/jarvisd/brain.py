@@ -5,7 +5,7 @@ import logging, os, re, subprocess
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, rgb, switchos, vrpair, webapps, websearch, workshop
+from . import makers, ota, protocols, rgb, switchos, vrpair, webapps, websearch, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -39,6 +39,8 @@ def parse_os(low):
         return "rollback", {}
     m = F(r"(?:set |make |turn )?(?:the |my )?(?:rgb|lights?|lighting|leds?) (?:to |colou?r )?(\w+)", t) or \
         F(r"(?:make|turn) (?:everything|my pc|the pc) (\w+)", t)
+    if m and m.group(1) == "mode" and re.fullmatch(r"(?:turn |set )?(?:the |my )?light mode", t):
+        m = None                             # rc9: "light mode" is the Windows/KDE light theme (qol), not an RGB profile
     if m:
         word = m.group(1)
         if word in ("off", "out"):
@@ -64,6 +66,12 @@ def parse_os(low):
     cg = vrpair.parse_cgnat(t)               # rc7: the VR CGNAT option by voice ("my router uses CGNAT", "turn off CGNAT")
     if cg:
         return "vr_cgnat", {"mode": cg}
+    pr = protocols.parse_voice(t)            # rc9: "purple protocol" re-themes JARVIS with a short effect; "normal protocol"
+    if pr:
+        return "protocol", {"kind": pr[0], "word": pr[1], "theme": pr[2]}
+    th = protocols.parse_theme(t)            # rc9: "red theme", "next theme" (quiet recolour)
+    if th:
+        return "theme", {"name": th}
     vr = vrpair.parse_voice(t)               # the Quest headset (VR bridge, rc5): pair / unpair / status / app link
     if vr:
         return {"pair": "pair_headset", "unpair": "unpair_headset", "status": "headset_status", "link": "vr_link"}[vr], {}
@@ -463,6 +471,19 @@ class LinuxBrain:
             r = setter(self.vr, mode == "on")
             log.info("VR CGNAT option by voice: %s -> %s", mode, r)
             return self.say(vrpair.cgnat_words(r, sir=s))
+        if action in ("protocol", "theme"):
+            send = getattr(self, "ui_send", None)
+            if send is None:
+                from . import ipc
+                send = ipc.send
+            kw = dict(sir=s, path=getattr(self, "cfg_path", None), send=send, hud=getattr(self, "hud", None))
+            if action == "theme":
+                return self.say(protocols.set_theme(x.get("name"), **kw))
+            if x.get("kind") == "unknown":
+                return self.say(protocols.unknown_words(x.get("word"), s))
+            if x.get("kind") == "normal":
+                return self.say(protocols.normal(gaming=self.is_gaming(), **kw))
+            return self.say(protocols.engage(x.get("word"), x.get("theme"), gaming=self.is_gaming(), **kw))
         if action == "web_search":
             return self.web_search(x.get("query") or "")
         if action == "search_source":

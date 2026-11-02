@@ -49,6 +49,15 @@ ser 'export WAYLAND_DISPLAY=wayland-0; kscreen-doctor -o 2>&1 | sed "s/\x1b\[[0-
 ser 'O=$(kscreen-doctor -j 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)[\"outputs\"][0][\"name\"])"); echo KSCREEN_OUT=$O; kscreen-doctor output.$O.mode.1920x1080@60 >/dev/null 2>&1 || kscreen-doctor output.$O.mode.1920x1080 >/dev/null 2>&1; echo MODE_RC=$?' 12
 ser 'sleep 4; echo jarvis-boot-test | sudo -S loginctl unlock-sessions; sleep 2; jarvisctl workspace open; echo UNLOCK_RC=$?' 14
 sleep 6; shot 24_workspace_1920
+# rc9: colour protocols on the real desktop. "blue theme" recolours quietly; "purple protocol" is filmed every ~0.3 s
+# (crackle, blackout, PURPLE PROTOCOL title, orb burst inside the workspace window, then the purple look).
+ser 'jarvisctl tell "blue theme"; echo THEME_RC=$?' 6
+shot 25_theme_blue
+ser 'jarvisctl tell "purple protocol"; echo PROTO_RC=$?' 0
+for i in $(seq -w 1 12); do mon "screendump /tmp/p$i.ppm"; sleep 0.2; done
+for i in $(seq -w 1 12); do convert /tmp/p$i.ppm "$OUT/26_protocol_$i.png" 2>/dev/null; done; echo "shot 26_protocol_01..12"
+sleep 3; shot 27_protocol_purple
+ser 'echo PROTOLOG_BEGIN; journalctl --user -b --no-pager -o cat | grep -E "protocol: |HUD theme"; echo PROTOLOG_END' 4
 ser 'echo KWIN_LIST2_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 mon "quit"; wait $QPID 2>/dev/null
 ls -la "$OUT"

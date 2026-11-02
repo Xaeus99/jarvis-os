@@ -72,10 +72,26 @@ class Follower:
         self.always = bool(c.get("always_show_on_desktop", False))
         self.hide_in_games = bool(c.get("hide_in_games", True))
         self.last = {}; self.active_until = 0.0
+        self.started = clock(); self.theme_ts = None
+
+    def _theme(self, st):
+        """rc9: a protocol / "red theme" said after this HUD started recolours the ring (older hud.json values don't)."""
+        ts, name = st.get("theme_ts"), st.get("theme")
+        if not name or not ts or ts == self.theme_ts or ts < self.started:
+            return False
+        self.theme_ts = ts
+        try:
+            from .core import theme as T
+            T.set_theme(name)
+            self.hud.update()
+        except Exception as e:
+            log.info("HUD theme %r: %r", name, e)
+        return True
 
     def tick(self, st):
         now = self.clock()
         if st:
+            self._theme(st)
             if st.get("state") != self.last.get("state"):
                 self.hud.set_state(st.get("state", "idle"))
             if st.get("caption_ts") != self.last.get("caption_ts") and st.get("caption"):

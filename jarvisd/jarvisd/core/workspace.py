@@ -710,6 +710,55 @@ def tile_label_pt(labels, room):
         pt -= 0.5
     return pt
 
+def split_label(label, fm, room):
+    """rc9: the tile name as 1 line, or 2 lines split at the space that gives the narrowest result, when that fits
+    `room` pixels with font metrics `fm`. None when neither fits (a single long word)."""
+    if fm.horizontalAdvance(label) <= room:
+        return [label]
+    words = label.split()
+    best = None
+    for i in range(1, len(words)):
+        a, b = " ".join(words[:i]), " ".join(words[i:])
+        w = max(fm.horizontalAdvance(a), fm.horizontalAdvance(b))
+        if w <= room and (best is None or w < best[0]):
+            best = (w, [a, b])
+    return best[1] if best else None
+
+def tile_label_layout(labels, room):
+    """rc9: (size, two_lines) for the whole grid. One line at 8.5 down to 7 px when every name fits; otherwise names may
+    wrap onto 2 lines (8.5 down to 6 px); one line at 6 px (elided as a last resort) when even that doesn't fit."""
+    pt = 8.5
+    while pt >= 7.0:
+        fm = QtGui.QFontMetrics(tile_label_font(pt))
+        if all(fm.horizontalAdvance(l) <= room for l in labels):
+            return pt, False
+        pt -= 0.5
+    pt = 8.5
+    while pt >= 6.0:
+        fm = QtGui.QFontMetrics(tile_label_font(pt))
+        if all(split_label(l, fm, room) for l in labels):
+            return pt, any(len(split_label(l, fm, room)) > 1 for l in labels)
+        pt -= 0.5
+    return 6.0, False
+
+def fit_tile_label(label, room, pt, two_lines):
+    """rc9: what one tile paints, measured against its own width at paint time (never trusts a size worked out for
+    another width or another machine's fonts): (font, lines). Shrinks to 6 px before eliding."""
+    size = pt
+    while True:
+        f = tile_label_font(size); fm = QtGui.QFontMetrics(f)
+        lines = split_label(label, fm, room) if two_lines else ([label] if fm.horizontalAdvance(label) <= room else None)
+        if lines:
+            return f, lines
+        if size <= 6.0:
+            if two_lines:
+                words = label.split()
+                if len(words) > 1:
+                    a = " ".join(words[:max(1, len(words) // 2)]); b = " ".join(words[max(1, len(words) // 2):])
+                    return f, [fm.elidedText(a, QtCore.Qt.ElideRight, room), fm.elidedText(b, QtCore.Qt.ElideRight, room)]
+            return f, [fm.elidedText(label, QtCore.Qt.ElideRight, room)]
+        size -= 0.5
+
 
 class LaunchTile(QtWidgets.QAbstractButton):
     remove = QtCore.Signal(object)
@@ -756,8 +805,9 @@ class LaunchTile(QtWidgets.QAbstractButton):
         if self.add or self.editing:
             pen.setStyle(QtCore.Qt.DashLine)
         p.setPen(pen); p.drawPath(path)
-        ic = min(r.width(), r.height() - 20) * 0.46
-        icr = QtCore.QRectF(r.center().x() - ic / 2, r.top() + (r.height() - 20 - ic) / 2 + 4, ic, ic)
+        band = 28 if getattr(self, "label_two", False) else 20     # rc9: room for a 2-line name under the icon
+        ic = min(r.width(), r.height() - band) * 0.46
+        icr = QtCore.QRectF(r.center().x() - ic / 2, r.top() + (r.height() - band - ic) / 2 + 4, ic, ic)
         if self.add:
             draw_glyph(p, icr, "plus", T.light())
             label = "ADD"
@@ -772,12 +822,17 @@ class LaunchTile(QtWidgets.QAbstractButton):
                 p.setFont(T.font("display", ic * 0.38, bold=True)); p.setPen(T.light())
                 mono = "".join(w[0] for w in re.findall(r"[A-Za-z0-9]+", self.entry.get("name") or "?")[:2]).upper() or "?"
                 p.drawText(icr, QtCore.Qt.AlignCenter, mono)
-        # rc8: one label size for the whole grid (LaunchPanel picks the largest that fits every name, 6-8.5 pt)
+        # rc8: one label size for the whole grid (LaunchPanel picks the largest that fits every name, 6-8.5 px)
+        # rc9: names may wrap onto 2 lines, and each tile re-measures against its own width at paint time
         room = int(r.width() - 6)
-        f = tile_label_font(getattr(self, "label_pt", 8.5)); fm = QtGui.QFontMetrics(f)
+        f, lines = fit_tile_label(label, room, getattr(self, "label_pt", 8.5), getattr(self, "label_two", False))
+        self.label_lines = lines
         p.setFont(f); p.setPen(_c(T.light(), 0.95 if hov else 0.75))
-        p.drawText(QtCore.QRectF(r.left() + 2, r.bottom() - 20, r.width() - 4, 16), QtCore.Qt.AlignCenter,
-                   fm.elidedText(label, QtCore.Qt.ElideRight, room))
+        lh = QtGui.QFontMetrics(f).height()
+        top = r.bottom() - 4 - lh * len(lines) if len(lines) > 1 else r.bottom() - 20
+        for i, ln in enumerate(lines):
+            p.drawText(QtCore.QRectF(r.left() + 2, top + i * lh, r.width() - 4, lh if len(lines) > 1 else 16),
+                       QtCore.Qt.AlignCenter, ln)
         if self.editing and not self.add:
             p.setPen(QtGui.QPen(T.accent(), 1.6)); p.setBrush(_c(T.bg0(), 0.9))
             p.drawEllipse(QtCore.QPointF(r.right() - 9, r.top() + 9), 7, 7)
@@ -823,7 +878,8 @@ class LaunchPanel(Panel):
     def tile_h(self, width=None):
         cols = self.cols(width)
         tw = (self._inner_w(width) - self.GAP * (cols - 1)) / max(1, cols)
-        return int(max(self.TILE_MIN_H, min(self.TILE_MAX_H, tw * 0.84)))
+        extra = 8 if getattr(self, "label_two", False) else 0     # rc9: a 2-line name gets 8 px more tile
+        return int(max(self.TILE_MIN_H, min(self.TILE_MAX_H, tw * 0.84))) + extra
 
     def rows(self, width=None):
         n = len(self.entries) + (1 if self.editing else 0)
@@ -842,16 +898,38 @@ class LaunchPanel(Panel):
         super().resizeEvent(ev)
         if getattr(self, "_last_cols", None) != self.cols() or getattr(self, "_last_th", None) != self.tile_h():
             self.rebuild()
+        elif getattr(self, "_last_w", None) != self.width():
+            self._relabel()             # rc9: same grid, new width -> the label size is worked out again
+
+    def _labels(self):
+        return [(e.get("name") or "?").upper() for e in self.entries] + (["ADD"] if self.editing else [])
+
+    def _relabel(self):
+        self._last_w = self.width()
+        cols = self.cols()
+        tw = (self._inner_w() - self.GAP * (cols - 1)) / max(1, cols)
+        pt, two = tile_label_layout(self._labels(), int(tw - 10))
+        if two != getattr(self, "label_two", False):
+            self.label_two = two
+            self.rebuild()              # the tile height changes with a second label line
+            return self.label_pt, self.label_two
+        self.label_pt, self.label_two = pt, two
+        for i in range(self.grid.count()):
+            w = self.grid.itemAt(i).widget()
+            if isinstance(w, LaunchTile):
+                w.label_pt, w.label_two = pt, two; w.update()
+        return pt, two
 
     def rebuild(self):
         while self.grid.count():
             w = self.grid.takeAt(0).widget()
             if w: w.deleteLater()
         cols = self.cols(); self._last_cols = cols
-        th = self.tile_h(); self._last_th = th
         items = list(self.entries) + ([None] if self.editing else [])
         tw = (self._inner_w() - self.GAP * (cols - 1)) / max(1, cols)
-        pt = tile_label_pt([(e.get("name") or "?").upper() if e else "ADD" for e in items], int(tw - 10))
+        pt, two = tile_label_layout([(e.get("name") or "?").upper() if e else "ADD" for e in items], int(tw - 10))
+        self.label_pt, self.label_two, self._last_w = pt, two, self.width()
+        th = self.tile_h(); self._last_th = th
         for i, e in enumerate(items):
             if e is None:
                 t = LaunchTile({}, add=True); t.clicked.connect(self.add_dialog)
@@ -864,10 +942,12 @@ class LaunchPanel(Panel):
                 t.editing = self.editing
                 t.clicked.connect(lambda _=False, t=t: self._tile_clicked(t))
                 t.remove.connect(self._remove); t.rename.connect(self._rename); t.move_by.connect(self._move)
-            t.setFixedHeight(th); t.label_pt = pt
+            t.setFixedHeight(th); t.label_pt = pt; t.label_two = two
             self.grid.addWidget(t, i // cols, i % cols)
         for c in range(cols):
             self.grid.setColumnStretch(c, 1)
+        for c in range(cols, max(cols, self.grid.columnCount())):
+            self.grid.setColumnStretch(c, 0)   # rc9: columns left from a wider grid kept stretch 1 and ate the tiles' width
         self._fit_height()
 
     def _tile_clicked(self, t):
