@@ -1,11 +1,29 @@
 # JARVIS OS 1.0 "Vibranium" — release notes
 
-> Release candidate: **v1.0.0-rc9** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
-> rc6 Oct 29, rc7 Oct 30, rc8 Nov 1, rc9 Nov 2: rc9 adds colour protocols ("purple protocol"), full Quick launch
-> names and cleaner spoken web-search answers).
+> Release candidate: **v1.0.0-rc10** (pre-release, beta channel; rc1 Oct 16, rc2 and rc3 Oct 22, rc4 Oct 23, rc5 Oct 28,
+> rc6 Oct 29, rc7 Oct 30, rc8 Nov 1, rc9 Nov 2, rc10 Nov 4: rc10 adds data charts by voice, a sound for each colour
+> protocol and your own protocols).
 > The final 1.0 gets the same notes plus its own
 > tag, download size and checksums. Everything below was tested in virtual machines; what only your real PC can
 > show is listed at the end.
+
+## New in rc10 (Nov 4)
+
+- **Data charts by voice.** Say "Jarvis, chart US unemployment since 2000", "graph the price of milk since 1980",
+  "compare eggs and bread" or "chart world population". The chart opens in its own window and JARVIS says what it
+  shows in one sentence ("Milk went from $2.62 in 1996 to $4.17 in 2026, up 59%"). Then "adjust for inflation"
+  redraws prices in today's dollars, "make it a bar chart" switches the style, "save this chart" puts a picture in
+  Pictures/JARVIS Charts and "close the chart" closes it. Real numbers only: prices, wages and inflation come from a
+  set of U.S. Bureau of Labor Statistics and Department of Labor figures that works offline; population, GDP, life
+  expectancy, CO2 and more come live from the World Bank and Our World in Data. Each chart names its source, missing
+  years stay gaps, and if there is no solid data JARVIS says so and draws nothing.
+- **A sound for each protocol.** "Purple protocol" now plays a short sound with its effect (a crackle, a rising
+  sweep and a chord whose pitch follows the colour), made on your PC, with no sound files to download. It never
+  plays during a game or for a quiet "red theme". Say "protocol sounds off" (or on) to choose.
+- **Your own protocols.** Edit protocols.json in the jarvis config folder (an example is there: "midnight" is the
+  stealth look, "sunrise" the orange one) and say "midnight protocol". "List my protocols" names them all.
+- **Same base.** Still Bazzite 44.20261026 (Linux kernel 7.2.11). Bazzite moved its stable images to Fedora 45 on
+  Nov 4; that move gets its own release candidate after more testing. Every test below ran again on the rc10 image.
 
 ## New in rc9 (Nov 2)
 

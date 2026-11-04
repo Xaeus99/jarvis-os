@@ -32,7 +32,7 @@ Get one with this invite: **[https://tab.bot/r/856A517B3CCACA47](https://tab.bot
 
 ## Status (1.0 release candidate, Oct 2026)
 
-Release candidate **v1.0.0-rc9** (Nov 2: colour protocols by voice ("purple protocol"), Quick launch names that fit, cleaner spoken web-search answers; rc1 Oct 16, rc2 + rc3 Oct 22, rc4 Oct 23, rc5 Oct 28, rc6 Oct 29, rc7 Oct 30, rc8 Nov 1). Every image goes through the same chain in virtual machines before it is released:
+Release candidate **v1.0.0-rc10** (Nov 4: data charts by voice ("chart US unemployment since 2000"), a sound for each colour protocol, your own protocols; rc1 Oct 16, rc2 + rc3 Oct 22, rc4 Oct 23, rc5 Oct 28, rc6 Oct 29, rc7 Oct 30, rc8 Nov 1, rc9 Nov 2). Every image goes through the same chain in virtual machines before it is released:
 unit tests, a signed build, a boot test to the desktop, the NVIDIA boot settings check, the voice test, the
 installer ISO booting from DVD and from a USB stick (UEFI + BIOS, and a Rufus ISO-mode stick), an unattended
 dual-boot install and a click-through install next to a dummy Windows (Windows stays byte-identical), and the

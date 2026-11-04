@@ -7,6 +7,8 @@
 #   spoken with sources, Fly Vault launcher.
 # Nov 2 2026 (1.0.0-rc9): colour protocols by voice (blue theme -> purple protocol -> normal protocol) and web-search answers
 #   without a leading list number.
+# Nov 4 2026 (1.0.0-rc10): your own protocols (protocols.json), the protocol sound, data charts by voice (milk chart from
+#   the offline set, inflation, save, close).
 # Nov 1 2026 (1.0.0-rc8): JARVIS's web apps as Quick launch tiles (the grid grows), web search on the processor
 #   (no NVIDIA GPU: the 1B model with trimmed sources).
 # Rerun Oct 15 2026 on beta = D12 (D11 + the safe graphics boot entry).
@@ -180,6 +182,21 @@ jobs:
             echo "::warning::the offline brain did not answer the web search, so the tidy answer was not exercised ($(grep -m1 '^LASTSEARCH=' "$S"))"
           fi
           echo "rc9 checks: OK"
+      - name: Verdict - your own protocols, protocol sound, data charts (rc10)
+        run: |
+          tr -d '\r' < shots/serial.log | perl -pe 's/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g' > /tmp/serial.txt
+          S=/tmp/serial.txt
+          grep -E '^(PJSON|PROTO3|CHART1|CHART2|CHARTSAVED|CHARTWIN2|CHARTLOG)' "$S" | head -30
+          grep -q "^PJSON=\[.*'midnight'" "$S" || { echo "::error::the example protocols.json was not written"; exit 1; }
+          grep -q '^PROTO3=stealth midnight' "$S" || { echo "::error::'midnight protocol' (from protocols.json) did not switch to the stealth look"; exit 1; }
+          grep -qE '^PROTO3=.* SFX=.*protocol-stealth-v1-[0-9]+\.wav' "$S" || { echo "::error::the protocol sound was not made"; exit 1; }
+          grep -q '^CHARTLOG: .*protocol sound: protocol-stealth' "$S" || echo "::warning::no audio player started the protocol sound on the VM"
+          grep -qE '^CHART1=U\.S\._average_milk_price 2 1980 CHARTWIN=[1-9]' "$S" || { echo "::error::'chart the price of milk since 1980' did not draw the offline milk chart in its window"; exit 1; }
+          grep -q '^CHART2=True True' "$S" || { echo "::error::'adjust for inflation' did not redraw the chart in today's dollars"; exit 1; }
+          grep -qE '^CHARTSAVED=[1-9]' "$S" || { echo "::error::'save this chart' wrote no PNG in Pictures/JARVIS Charts"; exit 1; }
+          grep -q '^CHARTWIN2=0' "$S" || echo "::warning::the chart window was still open after 'close the chart'"
+          ! sed -n '/==== RC10 PROTOCOL SOUND + CHARTS/,/==== BUILT-IN COMMAND/p' "$S" | grep -q 'Traceback' || { echo "::error::a Python error in the rc10 checks"; exit 1; }
+          echo "rc10 checks: OK"
       - uses: actions/upload-artifact@v6
         if: always()
         with: { name: standalone-test, path: shots/ }
@@ -188,3 +205,4 @@ jobs:
 # rc7 gate, Oct 30: yes/no questions + CGNAT by voice + web search + Fly Vault verdict
 # rc8 gate, Nov 1: workspace grid with web-app tiles + web search processor profile verdict
 # rc9 gate, Nov 2: colour protocols + tidy web-search answer verdict
+# rc10 gate, Nov 4: your own protocols + protocol sound + data charts verdict
