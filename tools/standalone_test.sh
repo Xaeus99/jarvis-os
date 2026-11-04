@@ -108,6 +108,24 @@ ser 'jarvisctl tell "normal protocol"' 6
 ser 'echo PROTO2=$(python3 -c "import json,os;c=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\")));print(c.get(\"theme\"),bool(c.get(\"protocol\")))" 2>&1)' 3
 ser 'journalctl --user -b --no-pager -o cat | grep -E "protocol: |HUD theme" | sed "s/^/PROTOLOG: /"' 4
 ser 'jarvisctl tell "purple theme"' 5
+# rc10: your own protocols (the daemon writes an example protocols.json once: midnight -> stealth), the protocol's short
+# synthesized sound (a cached WAV per colour), and data charts by voice (milk from the offline set, then inflation, save, close).
+mark "RC10 PROTOCOL SOUND + CHARTS"
+ser 'echo PJSON=$(python3 -c "import json,os;print(sorted(k for k in json.load(open(os.path.expanduser(\"~/.config/jarvis/protocols.json\"))) if not k.startswith(\"_\")))" 2>&1)' 3
+ser 'jarvisctl tell "midnight protocol"' 6
+ser 'echo PROTO3=$(python3 -c "import json,os;c=json.load(open(os.path.expanduser(\"~/.config/jarvis/config.json\")));p=c.get(\"protocol\") or {};print(c.get(\"theme\"),p.get(\"name\"))" 2>&1) SFX=$(ls ~/.cache/jarvis/sfx 2>/dev/null | tr "\n" " ")' 3
+ser 'jarvisctl tell "normal protocol"' 6
+ser 'jarvisctl tell "chart the price of milk since 1980"' 8
+shot 02e_chart_milk
+ser 'echo CHART1=$(python3 -c "import json,os;d=json.load(open(os.path.expanduser(\"~/.local/state/jarvis/charts/last.json\")));c=d[\"chart\"];print(c[\"title\"].replace(\" \",\"_\"),len(c[\"series\"]),min(min(int(y) for y in s[\"values\"]) for s in c[\"series\"]))" 2>&1) CHARTWIN=$(pgrep -fc "jarvisd[.]chartwin")' 3
+ser 'jarvisctl tell "adjust for inflation"' 6
+ser 'echo CHART2=$(python3 -c "import json,os;d=json.load(open(os.path.expanduser(\"~/.local/state/jarvis/charts/last.json\")));c=d[\"chart\"];print(c[\"inflation\"],d[\"opts\"].get(\"inflation\"))" 2>&1)' 3
+shot 02f_chart_inflation
+ser 'jarvisctl tell "save this chart"' 6
+ser 'echo CHARTSAVED=$(ls ~/Pictures/"JARVIS Charts" 2>/dev/null | grep -c "\.png$")' 2
+ser 'jarvisctl tell "close the chart"' 4
+ser 'echo CHARTWIN2=$(pgrep -fc "jarvisd[.]chartwin")' 2
+ser 'journalctl --user -b --no-pager -o cat | grep -E "chart: |chart saved|chart window|protocol sound" | sed "s/^/CHARTLOG: /"' 4
 mark "BUILT-IN COMMAND, NO NETWORK NEEDED"; ser 'jarvisctl workspace open' 6; ser 'jarvisctl tell "what time is it"' 12
 shot 03_builtin
 # the offline brain: first login started jarvis-ai-setup.service; wait for it (VM: no GPU -> the small model)

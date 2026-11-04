@@ -325,8 +325,14 @@ class LinuxBrain:
             if not last.get("chart"):
                 return self.say(f"There's no chart to save yet, {s}. Say chart, then what you'd like to see.")
             folder = charts.pictures_dir(home)
-            try:
-                path = charts.save_png(last["chart"], os.path.join(folder, charts.slug(last["chart"]) + time.strftime("-%Y%m%d-%H%M%S") + ".png"))
+            path = os.path.join(folder, charts.slug(last["chart"]) + time.strftime("-%Y%m%d-%H%M%S") + ".png")
+            try:                                 # drawn offscreen in its own process: the daemon never creates a Qt app
+                env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+                r = subprocess.run(charts.window_argv(os.path.join(charts.state_dir(home), "last.json")) + ["--png", path, "--size", "1600x930"],
+                                   env=env, capture_output=True, text=True, timeout=90,
+                                   cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if r.returncode != 0 or not os.path.exists(path):
+                    raise RuntimeError((r.stderr or r.stdout or "no file")[-300:])
             except Exception as e:
                 log.warning("chart save failed: %r", e)
                 return self.say(f"I couldn't save that chart, {s}.")

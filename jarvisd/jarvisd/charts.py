@@ -555,12 +555,12 @@ def _nice(x):
 
 def ensure_app():
     """A QGuiApplication for offscreen rendering (the daemon has none); fonts registered when the bundle is there."""
-    from PySide6 import QtGui
+    from PySide6 import QtGui, QtWidgets
     app = QtGui.QGuiApplication.instance()
     if app is None:
         if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
             os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        app = QtGui.QGuiApplication([])
+        app = QtWidgets.QApplication([])     # a QApplication (not just QGuiApplication) so widgets can share the process
     try:
         from .core import theme as T
         T.load_fonts()
