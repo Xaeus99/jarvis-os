@@ -1,11 +1,11 @@
 """LinuxBrain: routes a heard phrase to (1) JARVIS OS commands, (2) the shared v5.1 local commands, or
 (3) Tab. Same persona as Windows: answers in the J.A.R.V.I.S. voice and calls him "sir"."""
 from __future__ import annotations
-import logging, os, re, subprocess
+import logging, os, re, subprocess, time
 
 from .core import commands, qol
 from .linux_hands import LinuxHands, Runner
-from . import makers, ota, protocols, rgb, switchos, vrpair, webapps, websearch, workshop
+from . import charts, makers, ota, protocols, rgb, switchos, vrpair, webapps, websearch, workshop
 from .remote_control import RemoteControl
 
 log = logging.getLogger("jarvisd.brain")
@@ -66,6 +66,12 @@ def parse_os(low):
     cg = vrpair.parse_cgnat(t)               # rc7: the VR CGNAT option by voice ("my router uses CGNAT", "turn off CGNAT")
     if cg:
         return "vr_cgnat", {"mode": cg}
+    cv = charts.parse_voice(t)               # rc10: "chart US unemployment since 2000", "make it a bar chart", "save this chart"
+    if cv:
+        return "chart_" + cv[0], {"q": cv[1] if cv[0] == "chart" else None, "opts": cv[1] if cv[0] == "mod" else None}
+    px = protocols.parse_extra(t)            # rc10: "protocol sounds off", "list my protocols"
+    if px:
+        return "protocol_" + px[0], {"on": px[1]}
     pr = protocols.parse_voice(t)            # rc9: "purple protocol" re-themes JARVIS with a short effect; "normal protocol"
     if pr:
         return "protocol", {"kind": pr[0], "word": pr[1], "theme": pr[2]}
@@ -281,6 +287,78 @@ class LinuxBrain:
                             f"without the internet, or \u201cwhat can you do\u201d for my built-in commands.")
         return self.say(f"I can't do that one offline, {s}. Say \u201cwhat can you do\u201d for my local commands.")
 
+    def _chart_window(self, path):
+        """Open the chart window unless one is already showing (it redraws itself when last.json changes)."""
+        p = getattr(self, "_chartwin", None)
+        try:
+            if p is not None and hasattr(p, "poll") and p.poll() is None:
+                return p
+        except Exception:
+            pass
+        argv = charts.window_argv(path)
+        if isinstance(self.run, Runner):         # the real daemon: keep the process so a 2nd chart reuses the window
+            env = dict(os.environ); env.setdefault("QT_QPA_PLATFORM", "xcb")
+            try:
+                self._chartwin = subprocess.Popen(argv, env=env, start_new_session=True, stdin=subprocess.DEVNULL,
+                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                  cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            except OSError as e:
+                log.warning("chart window failed: %r", e); self._chartwin = None
+        else:
+            self._chartwin = self.run(argv)
+        return self._chartwin
+
+    def chart_action(self, kind, x):
+        """rc10: data charts by voice (charts.py, ported from Windows 7.9.3). Real numbers only; NoData is said, never drawn."""
+        s = self.sir
+        home = getattr(self, "home", None)
+        if kind == "close":
+            p = getattr(self, "_chartwin", None)
+            try:
+                p.terminate()
+            except Exception:
+                pass
+            self._chartwin = None
+            return self.say(f"Chart closed, {s}.")
+        last = charts.load_last(home)
+        if kind == "save":
+            if not last.get("chart"):
+                return self.say(f"There's no chart to save yet, {s}. Say chart, then what you'd like to see.")
+            folder = charts.pictures_dir(home)
+            try:
+                path = charts.save_png(last["chart"], os.path.join(folder, charts.slug(last["chart"]) + time.strftime("-%Y%m%d-%H%M%S") + ".png"))
+            except Exception as e:
+                log.warning("chart save failed: %r", e)
+                return self.say(f"I couldn't save that chart, {s}.")
+            log.info("chart saved: %s", path)
+            return self.say(f"Saved to Pictures, in JARVIS Charts, {s}.")
+        if kind == "mod":
+            if not last.get("query"):
+                return self.say(f"There's no chart up yet, {s}. Say chart, then what you'd like to see.")
+            q, opts = last["query"], dict(last.get("opts") or {})
+            opts.update(x.get("opts") or {})
+        else:
+            q, opts = (x.get("q") or "").strip(), {}
+            if not q:
+                return self.say(f"A chart of what, {s}?")
+        if kind == "mod" and (x.get("opts") or {}).get("inflation") and last.get("chart") and \
+                not any(charts.is_money(sr) for sr in last["chart"].get("series") or []):
+            return self.say(f"That chart isn't in dollars, {s}, so there's nothing to adjust for inflation.")
+        try:
+            ch = charts.build(q, inflation=opts.get("inflation"), kind=opts.get("kind"))
+        except charts.NoData as e:
+            log.info("chart: %r -> no data (%s)", q, e)
+            return self.say(f"{e}")
+        except Exception as e:
+            log.warning("chart failed: %r", e)
+            return self.say(f"I couldn't reach the data for that one, {s}. The offline set still has prices, wages and inflation.")
+        path = charts.save_last(ch, q, opts, home)
+        self._chart_window(path)
+        log.info("chart: %r -> %s (%s, %d series)", q, ch.get("title"), ch.get("kind"), len(ch.get("series") or []))
+        if kind == "mod" and "kind" in (x.get("opts") or {}):
+            return self.say(f"{opts['kind'].capitalize()} chart, {s}.")
+        return self.say(charts.summary(ch, s))
+
     def web_search(self, query):
         """rc7: "search the web for ..." -> DuckDuckGo + the offline brain, spoken with its sources (websearch.py)."""
         s = self.sir
@@ -471,6 +549,12 @@ class LinuxBrain:
             r = setter(self.vr, mode == "on")
             log.info("VR CGNAT option by voice: %s -> %s", mode, r)
             return self.say(vrpair.cgnat_words(r, sir=s))
+        if action.startswith("chart_"):
+            return self.chart_action(action[6:], x or {})
+        if action == "protocol_sound":
+            return self.say(protocols.set_sound(x.get("on"), s, getattr(self, "cfg_path", None)))
+        if action == "protocol_list":
+            return self.say(protocols.list_words(s))
         if action in ("protocol", "theme"):
             send = getattr(self, "ui_send", None)
             if send is None:
@@ -481,6 +565,7 @@ class LinuxBrain:
                 return self.say(protocols.set_theme(x.get("name"), **kw))
             if x.get("kind") == "unknown":
                 return self.say(protocols.unknown_words(x.get("word"), s))
+            kw["sound"] = getattr(self, "protocol_sound", None)     # rc10: tests inject a recorder; None = protosound.play
             if x.get("kind") == "normal":
                 return self.say(protocols.normal(gaming=self.is_gaming(), **kw))
             return self.say(protocols.engage(x.get("word"), x.get("theme"), gaming=self.is_gaming(), **kw))

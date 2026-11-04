@@ -307,6 +307,11 @@ def main():
         except Exception as e: log.info("OBS warm-up: %r", e)
     threading.Thread(target=warm_obs, name="obs-warm", daemon=True).start()
     brain.hud = hud                       # rc9: protocols / "red theme" recolour the HUD ring through hud.json
+    try:                                  # rc10: an example ~/.config/jarvis/protocols.json he can edit (never overwritten)
+        from . import protocols as _protocols
+        _protocols.ensure_custom_example()
+    except Exception as e:
+        log.info("protocols.json example: %r", e)
     try:                                  # games: HUD stays out of the way, auto game mode
         from . import gamewatch
         brain.gamewatch = gamewatch.wire(cfg, brain.run, hud=hud).start()

@@ -28,6 +28,64 @@ _GO = r"(?:(?:activate|engage|initiate|start|run|begin|launch|enable|execute|com
 _STOP_FIRST = {"what", "which", "how", "why", "is", "are", "the", "a", "an", "about", "tell", "explain", "my", "your",
                "internet", "http", "https", "tcp", "network", "security", "communication", "new", "this", "that"}
 SAY_LIST = "purple, red, blue, orange, crimson or stealth"
+CUSTOM_PATH = os.path.expanduser("~/.config/jarvis/protocols.json")
+CUSTOM_EXAMPLE = {"_help": "rc10: your own protocols. Name -> a colour JARVIS knows (purple, red, blue, orange, crimson, stealth, "
+                           "or a theme name). Say '<name> protocol'.", "midnight": "stealth", "sunrise": "orange"}
+
+def load_custom(path=None):
+    """rc10: ~/.config/jarvis/protocols.json {"midnight": "stealth", "storm": "blue"} -> {name: theme key}; bad rows skipped."""
+    try:
+        raw = json.load(open(path or CUSTOM_PATH))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    from .core import theme as T
+    out = {}
+    for k, v in raw.items():
+        if not isinstance(k, str) or k.startswith("_") or not isinstance(v, str):
+            continue
+        name = re.sub(r"[^a-z ]+", "", k.lower()).strip()
+        if not name or len(name.split()) > 2 or name in NORMAL_WORDS or name.split()[0] in _STOP_FIRST:
+            continue
+        th = PROTOCOLS.get(v.lower().strip()) or T.resolve(v.lower().strip())
+        if th:
+            out[name] = th
+    return out
+
+def ensure_custom_example(path=None):
+    """Write the example file once so he can find and edit it (never overwrites his own)."""
+    path = path or CUSTOM_PATH
+    if os.path.exists(path):
+        return False
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(CUSTOM_EXAMPLE, f, indent=1)
+        return True
+    except OSError:
+        return False
+
+def list_words(sir="sir", path=None):
+    mine = sorted(load_custom(path))
+    s = f"I have {SAY_LIST} protocols, {sir}"
+    if mine:
+        s += ", plus yours: " + ", ".join(mine)
+    return s + ". Normal protocol puts the usual look back."
+
+def parse_extra(text):
+    """rc10: 'protocol sounds off/on', 'list my protocols' -> ('sound', bool) | ('list', None) | None."""
+    t = _clean(text)
+    m = re.fullmatch(r"(?:turn |switch )?(?:the )?protocol (?:sounds?|sfx|audio)(?: effects?)? (on|off)|"
+                     r"(mute|unmute|silence|enable|disable)(?: the)? protocol (?:sounds?|sfx|audio)(?: effects?)?|"
+                     r"(?:turn |switch )(on|off)(?: the)? protocol (?:sounds?|sfx|audio)(?: effects?)?", t)
+    if m:
+        w = m.group(1) or m.group(2) or m.group(3)
+        return ("sound", w in ("on", "unmute", "enable"))
+    if re.fullmatch(r"(?:list|show|tell me|name)(?: me)?(?: all)?(?: my| your| the)? protocols|"
+                    r"what (?:protocols|colou?r protocols) (?:do you have|are there|can you do|have you got)|which protocols (?:do you have|are there)", t):
+        return ("list", None)
+    return None
 
 def _clean(text):
     t = (text or "").lower().replace("\u2019", "'").strip()
@@ -36,7 +94,7 @@ def _clean(text):
     t = re.sub(r"^(?:please |can you |could you |let's |lets |go ahead and |i want |initiate the |activate the )+", "", t).strip()
     return re.sub(r"(?:,? please|,? for me|,? jarvis|,? now)+$", "", t).strip()
 
-def parse_voice(text):
+def parse_voice(text, custom_path=None):
     """('engage', word, theme) | ('normal', None, None) | ('unknown', word, None) | None (not a protocol phrase)."""
     t = _clean(text)
     if re.fullmatch(r"(?:end|stop|cancel|exit|disengage|deactivate|turn off|kill|drop|abort)(?: the)?(?: [a-z]+){0,2} protocols?"
@@ -51,7 +109,7 @@ def parse_voice(text):
         return None
     if word in NORMAL_WORDS:
         return ("normal", None, None)
-    theme = PROTOCOLS.get(word)
+    theme = PROTOCOLS.get(word) or load_custom(custom_path).get(word)
     if theme is None:
         from .core import theme as T
         theme = T.resolve(word) if word not in ("normal",) else None
@@ -104,7 +162,20 @@ def _show(theme, title, effect, send, hud):
             log.info("protocol: HUD unreachable: %r", e)
     return shown
 
-def engage(word, theme, sir="sir", path=None, send=None, hud=None, gaming=False):
+def _sound(theme, effect, sound, path):
+    """rc10: the protocol's short sound, only with the effect (never in a game, never for a quiet theme change)."""
+    if not effect:
+        return None
+    try:
+        if sound is None:
+            from . import protosound
+            return protosound.play(theme, load_cfg(path))
+        return sound(theme)
+    except Exception as e:
+        log.info("protocol sound skipped: %r", e)
+        return None
+
+def engage(word, theme, sir="sir", path=None, send=None, hud=None, gaming=False, sound=None):
     def upd(c):
         base = (c.get("protocol") or {}).get("base") or c.get("theme") or DEFAULT_THEME
         c["protocol"] = {"name": word, "theme": theme, "base": base, "since": int(time.time())}
@@ -112,10 +183,11 @@ def engage(word, theme, sir="sir", path=None, send=None, hud=None, gaming=False)
     save_cfg(upd, path)
     title = f"{word.upper()} PROTOCOL"
     shown = _show(theme, title, not gaming, send, hud)
+    _sound(theme, not gaming, sound, path)
     log.info("protocol: %s -> theme %s (workspace %s, gaming %s)", title, theme, "open" if shown else "not running", gaming)
     return f"{word.capitalize()} protocol engaged, {sir}."
 
-def normal(sir="sir", path=None, send=None, hud=None, gaming=False):
+def normal(sir="sir", path=None, send=None, hud=None, gaming=False, sound=None):
     from .core import theme as T
     cfg = load_cfg(path)
     p = cfg.get("protocol")
@@ -126,6 +198,7 @@ def normal(sir="sir", path=None, send=None, hud=None, gaming=False):
         c.pop("protocol", None); c["theme"] = base
     save_cfg(upd, path)
     _show(base, "NORMAL PROTOCOL", not gaming, send, hud)
+    _sound(base, not gaming, sound, path)
     log.info("protocol: normal -> theme %s", base)
     return f"Normal protocol, {sir}. Back to {T.label(base).split(' (')[0]}."
 
@@ -142,4 +215,9 @@ def set_theme(name, sir="sir", path=None, send=None, hud=None):
     return f"{T.label(n)} theme, {sir}."
 
 def unknown_words(word, sir="sir"):
-    return f"I don't have a {word} protocol, {sir}. Try {SAY_LIST}, or normal protocol."
+    return (f"I don't have a {word} protocol, {sir}. Try {SAY_LIST}, or normal protocol. "
+            f"You can add your own in protocols.json, in the jarvis config folder.")
+
+def set_sound(on, sir="sir", path=None):
+    save_cfg(lambda c: c.__setitem__("protocol_sound", bool(on)), path)
+    return f"Protocol sounds {'on' if on else 'off'}, {sir}."

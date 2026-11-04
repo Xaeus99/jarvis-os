@@ -58,6 +58,16 @@ for i in $(seq -w 1 12); do mon "screendump /tmp/p$i.ppm"; sleep 0.2; done
 for i in $(seq -w 1 12); do convert /tmp/p$i.ppm "$OUT/26_protocol_$i.png" 2>/dev/null; done; echo "shot 26_protocol_01..12"
 sleep 3; shot 27_protocol_purple
 ser 'echo PROTOLOG_BEGIN; journalctl --user -b --no-pager -o cat | grep -E "protocol: |HUD theme"; echo PROTOLOG_END' 4
+# rc10: data charts by voice. Milk comes from the offline set (works with no network); inflation re-draws it in today's
+# dollars; world population comes live from the World Bank when the VM is online. Plus the protocol sound line in the log.
+ser 'jarvisctl tell "chart the price of milk since 1980"; echo CHART_RC=$?' 8
+shot 28_chart_milk
+ser 'jarvisctl tell "adjust for inflation"; echo CHART2_RC=$?' 6
+shot 29_chart_inflation
+ser 'jarvisctl tell "chart world population"; echo CHART3_RC=$?' 14
+shot 30_chart_population
+ser 'echo CHARTLOG_BEGIN; journalctl --user -b --no-pager -o cat | grep -E "chart: |chart window|protocol sound"; ls ~/.local/state/jarvis/charts ~/.cache/jarvis/sfx 2>&1; echo CHARTLOG_END' 4
+ser 'jarvisctl tell "close the chart"; echo CLOSE_RC=$?' 3
 ser 'echo KWIN_LIST2_BEGIN; jarvisctl windows; echo KWIN_RC=$?' 10
 mon "quit"; wait $QPID 2>/dev/null
 ls -la "$OUT"
