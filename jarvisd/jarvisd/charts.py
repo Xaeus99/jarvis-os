@@ -664,8 +664,12 @@ def load_last(home=None):
     return d if isinstance(d, dict) else {}
 
 def pictures_dir(home=None):
+    """~/Pictures/JARVIS Charts (the desktop's own Pictures folder when xdg-user-dir names one; a given home is used as is)."""
+    given = home is not None
     home = home or os.path.expanduser("~")
     pics = os.path.join(home, "Pictures")
+    if given:
+        return os.path.join(pics, "JARVIS Charts")
     try:
         import subprocess
         r = subprocess.run(["xdg-user-dir", "PICTURES"], capture_output=True, text=True, timeout=3)
