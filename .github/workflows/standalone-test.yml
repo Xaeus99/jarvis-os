@@ -206,3 +206,4 @@ jobs:
 # rc8 gate, Nov 1: workspace grid with web-app tiles + web search processor profile verdict
 # rc9 gate, Nov 2: colour protocols + tidy web-search answer verdict
 # rc10 gate, Nov 4: your own protocols + protocol sound + data charts verdict
+# rc10 re-gate, Nov 4: first gate read CHART2/CHARTSAVED while JARVIS was still speaking the milk summary; each step now waits for its log line
